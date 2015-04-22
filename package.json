@@ -3,5 +3,10 @@
   "dependencies": {
     "todomvc-app-css": "^2.0.0",
     "todomvc-common": "^1.0.0"
+  },
+  "devDependencies": {
+    "browserify": "^9.0.8",
+    "coffeeify": "^1.0.0",
+    "shelljs": "^0.4.0"
   }
 }
