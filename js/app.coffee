@@ -3,7 +3,7 @@
 $ = require 'jquery'
 keycode = require 'keycode'
 
-Transmitter = require 'transmitter'
+window.Transmitter = require 'transmitter'
 
 
 class Todo extends Transmitter.Nodes.Record
@@ -35,6 +35,7 @@ class TodoView extends Transmitter.Nodes.Record
 
   @defineLazy 'startEditChannel', ->
    new Transmitter.Channels.SimpleChannel()
+     .inBackwardDirection()
      .fromSource @labelDblclickEvt
      .toTarget @editStateVar
      .withTransform (msg) ->
@@ -43,6 +44,7 @@ class TodoView extends Transmitter.Nodes.Record
 
   @defineLazy 'completeEditChannel', ->
    new Transmitter.Channels.SimpleChannel()
+     .inBackwardDirection()
      .fromSource @inputKeypressEvt
      .toTarget @editStateVar
      .withTransform (msg) ->
@@ -64,6 +66,9 @@ class TodoView extends Transmitter.Nodes.Record
 
   @defineLazy 'inputKeypressEvt', ->
     new Transmitter.DOMElement.DOMEvent(@$element.find('.edit')[0], 'keyup')
+
+  @defineLazy 'destroyClickEvt', ->
+    new Transmitter.DOMElement.DOMEvent(@$element.find('.destroy')[0], 'click')
 
 
   class ClassToggleVar extends Transmitter.Nodes.Variable
@@ -129,29 +134,60 @@ class TodoViewChannel extends Transmitter.Channels.CompositeChannel
       .withDerived @view.isCompletedClassVar
 
 
-todoList = new Transmitter.Nodes.List()
+window.todoList = new Transmitter.Nodes.List()
+todoList.inspect = -> 'todoList'
 
-todoListView = new TodoListView($('.todo-list'))
+window.todoListView = new TodoListView($('.todo-list'))
 
 todoListViewChannel = new Transmitter.Channels.ListChannel()
   .withOrigin todoList
-  .withMapOrigin (todo) -> console.log todo; new TodoView(todo)
+  .withMapOrigin (todo) -> new TodoView(todo)
   .initOrigin()
   .withDerived todoListView.viewList
-  .withMatchOriginDerived (todo, todoView) -> console.log todo, todoView; todo == todoView.todo
+  .withMatchOriginDerived (todo, todoView) -> todo == todoView.todo
   .withOriginDerivedChannel (todo, todoView) ->
-    new TodoViewChannel(todo, todoView)
+    if todo? and todoView?
+      new TodoViewChannel(todo, todoView)
+    else
+      Transmitter.Channels.getNullChannel()
+
+removeTodoChannelList = new Transmitter.ChannelNodes.ChannelList()
+removeTodoChannel = new Transmitter.Channels.SimpleChannel()
+  .fromSource todoListView.viewList
+  .toConnectionTarget removeTodoChannelList
+  .withTransform (todoViews) ->
+    todoViews.map (todoView) ->
+      new Transmitter.Channels.SimpleChannel()
+        .inBackwardDirection()
+        .fromSource todoView.destroyClickEvt
+        .toTarget todoList
+        .withTransform (payload) ->
+          payload.transform(
+            (ev) ->
+              todoList.payloads.remove(todoView.todo)
+          ,
+            (ev) -> todoList.payloads.noOp()
+          )
 
 
-Transmitter.setLogging off
+Element::inspect = -> '<' + @tagName + ' ... />'
+$.Event::inspect = -> '[$Ev ' + @type + ' ... ]'
+Event::inspect = -> '[Ev ' + @type + ' ... ]'
+
+# Transmitter.Transmission::loggingFilter = (msg) ->
+#   msg.match('TodoListView') or msg.match('todoList')
+
+Transmitter.Transmission::loggingIsEnabled = no
 
 Transmitter.startTransmission (tr) ->
   todoListView.init(tr)
   todoListViewChannel.connect(tr)
+  removeTodoChannel.connect(tr)
 
   todo1 = new Todo()
   todo2 = new Todo()
   todo1.labelVar.updateState(tr, 'Todo 1')
   todo2.labelVar.updateState(tr, 'Todo 2')
   todo2.isCompletedVar.updateState(tr, yes)
+
   todoList.updateState(tr, [todo1, todo2])
