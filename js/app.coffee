@@ -137,6 +137,37 @@ class TodoViewChannel extends Transmitter.Channels.CompositeChannel
 window.todoList = new Transmitter.Nodes.List()
 todoList.inspect = -> 'todoList'
 
+newTodoLabelInputVar =
+    new Transmitter.DOMElement.InputValueVar($('.new-todo')[0])
+newTodoLabelInputVar.inspect = -> 'newTodoLabelInputVar'
+
+newTodoKeypressEvt =
+  new Transmitter.DOMElement.DOMEvent($('.new-todo')[0], 'keyup')
+newTodoKeypressEvt.inspect = -> 'newTodoKeypressEvt'
+
+createTodoChannel = new Transmitter.Channels.SimpleChannel()
+  .inBackwardDirection()
+  .fromSource newTodoLabelInputVar
+  .fromSource newTodoKeypressEvt
+  .toTarget todoList
+  .withTransform (payload, tr) ->
+    payload
+      .fetch([newTodoLabelInputVar, newTodoKeypressEvt])
+      .morph ([label, keypress]) ->
+        keypress.transform(
+          (ev) ->
+            console.log keycode(ev), label.get()
+            if keycode(ev) is 'enter'
+              todo = new Todo()
+              todo.labelVar.updateState(tr, label.get())
+              todoList.payloads.append(todo)
+            else
+              todoList.payloads.noOp()
+        ,
+          -> todoList.payloads.noOp()
+        )
+
+
 window.todoListView = new TodoListView($('.todo-list'))
 
 todoListViewChannel = new Transmitter.Channels.ListChannel()
@@ -175,7 +206,7 @@ $.Event::inspect = -> '[$Ev ' + @type + ' ... ]'
 Event::inspect = -> '[Ev ' + @type + ' ... ]'
 
 # Transmitter.Transmission::loggingFilter = (msg) ->
-#   msg.match('TodoListView') or msg.match('todoList')
+#   msg.match('todoList')
 
 Transmitter.Transmission::loggingIsEnabled = no
 
@@ -183,6 +214,7 @@ Transmitter.startTransmission (tr) ->
   todoListView.init(tr)
   todoListViewChannel.connect(tr)
   removeTodoChannel.connect(tr)
+  createTodoChannel.connect(tr)
 
   todo1 = new Todo()
   todo2 = new Todo()
