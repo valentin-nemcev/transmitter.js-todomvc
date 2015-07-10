@@ -102,7 +102,7 @@ class TodoListView extends Transmitter.Nodes.Record
       .fromSource @viewList
       .toTarget @elementList
       .withTransform (views) ->
-        views.mapIfMatch(
+        views.updateMatching(
           (view) -> view.$element[0]
           (view, element) -> view.$element[0] == element
         )
@@ -134,6 +134,7 @@ class TodoViewChannel extends Transmitter.Channels.CompositeChannel
       .withDerived @view.isCompletedClassVar
 
 
+
 window.todoList = new Transmitter.Nodes.List()
 todoList.inspect = -> 'todoList'
 
@@ -150,22 +151,31 @@ createTodoChannel = new Transmitter.Channels.SimpleChannel()
   .fromSource newTodoLabelInputVar
   .fromSource newTodoKeypressEvt
   .toTarget todoList
-  .withTransform (payload, tr) ->
-    payload
-      .fetch([newTodoLabelInputVar, newTodoKeypressEvt])
-      .morph ([label, keypress]) ->
-        keypress.transform(
-          (ev) ->
-            console.log keycode(ev), label.get()
-            if keycode(ev) is 'enter'
-              todo = new Todo()
-              todo.labelVar.updateState(tr, label.get())
-              todoList.payloads.append(todo)
-            else
-              todoList.payloads.noOp()
-        ,
-          -> todoList.payloads.noOp()
-        )
+  .withTransform (payloads, tr) ->
+    label    = payloads.get(newTodoLabelInputVar)
+    keypress = payloads.get(newTodoKeypressEvt)
+
+    key = keycode(keypress.get?())
+    console.log key, label.get()
+    if key is 'enter'
+      todo = new Todo()
+      todo.labelVar.updateState(tr, label.get())
+      Transmitter.Payloads.List.appendConst(todo)
+    else
+      Transmitter.Payloads.noop()
+
+
+clearNewTodoLabelInputChannel = new Transmitter.Channels.SimpleChannel()
+  .inForwardDirection()
+  .fromSource newTodoKeypressEvt
+  .toTarget newTodoLabelInputVar
+  .withTransform (keypress) ->
+    key = keycode(keypress.get?())
+    console.log key
+    if key in ['esc', 'enter']
+      Transmitter.Payloads.Variable.setConst('')
+    else
+      Transmitter.Payloads.noop()
 
 
 window.todoListView = new TodoListView($('.todo-list'))
@@ -193,12 +203,10 @@ removeTodoChannel = new Transmitter.Channels.SimpleChannel()
         .fromSource todoView.destroyClickEvt
         .toTarget todoList
         .withTransform (payload) ->
-          payload.transform(
-            (ev) ->
-              todoList.payloads.remove(todoView.todo)
-          ,
-            (ev) -> todoList.payloads.noOp()
-          )
+          if payload.get?
+            Transmitter.Payloads.List.removeConst(todoView.todo)
+          else
+            Transmitter.Payloads.noop()
 
 
 Element::inspect = -> '<' + @tagName + ' ... />'
@@ -215,6 +223,7 @@ Transmitter.startTransmission (tr) ->
   todoListViewChannel.connect(tr)
   removeTodoChannel.connect(tr)
   createTodoChannel.connect(tr)
+  clearNewTodoLabelInputChannel.connect(tr)
 
   todo1 = new Todo()
   todo2 = new Todo()
