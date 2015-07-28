@@ -1,5 +1,7 @@
 'use strict'
 
+{inspect} = require 'util'
+
 $ = require 'jquery'
 keycode = require 'keycode'
 
@@ -8,10 +10,12 @@ window.Transmitter = require 'transmitter'
 
 class Todo extends Transmitter.Nodes.Record
 
+  inspect: -> "[Todo #{inspect @labelVar.get()}]"
+
   init: (tr, defaults = {}) ->
     {label, isCompleted} = defaults
-    @labelVar.updateState(tr, label) if label?
-    @isCompletedVar.updateState(tr, isCompleted) if isCompleted?
+    @labelVar.init(tr, label) if label?
+    @isCompletedVar.init(tr, isCompleted) if isCompleted?
     return this
 
   @defineVar 'labelVar'
@@ -20,6 +24,8 @@ class Todo extends Transmitter.Nodes.Record
 
 
 class TodoView extends Transmitter.Nodes.Record
+
+  inspect: -> "[TodoView #{inspect @todo.labelVar.get()}]"
 
   constructor: (@todo) ->
     @$element = $('<li/>').append(
@@ -33,28 +39,67 @@ class TodoView extends Transmitter.Nodes.Record
 
 
   init: (tr) ->
-    @editStateVar.updateState(tr, off)
-    @startEditChannel.connect(tr)
-    @completeEditChannel.connect(tr)
+    @editStateVar.init(tr, off)
+    @acceptEditChannel.init(tr)
+    @rejectEditChannel.init(tr)
+    @editStateChannel = new EditStateChannel(this).init(tr)
     return this
 
 
-  @defineLazy 'startEditChannel', ->
-   new Transmitter.Channels.SimpleChannel()
-     .inBackwardDirection()
-     .fromSource @labelDblclickEvt
-     .toTarget @editStateVar
-     .withTransform (msg) ->
-       msg.map(-> yes)
+  @defineLazy 'startEditEvt', -> @labelDblclickEvt
+  @defineLazy 'acceptEditEvt', -> new Transmitter.Nodes.RelayNode()
+  @defineLazy 'rejectEditEvt', -> new Transmitter.Nodes.RelayNode()
+
+  @defineLazy 'acceptEditChannel', ->
+    new Transmitter.Channels.SimpleChannel()
+      .inBackwardDirection()
+      .fromSource @inputKeypressEvt
+      .toTarget @acceptEditEvt
+      .withTransform (msg) ->
+        if keycode(msg.get?()) is 'enter'
+          Transmitter.Payloads.Variable.setConst(yes)
+        else
+          Transmitter.Payloads.noop()
+
+  @defineLazy 'rejectEditChannel', ->
+    new Transmitter.Channels.SimpleChannel()
+      .inBackwardDirection()
+      .fromSource @inputKeypressEvt
+      .toTarget @rejectEditEvt
+      .withTransform (msg) ->
+        if keycode(msg.get?()) is 'esc'
+          Transmitter.Payloads.Variable.setConst(yes)
+        else
+          Transmitter.Payloads.noop()
 
 
-  @defineLazy 'completeEditChannel', ->
-   new Transmitter.Channels.SimpleChannel()
-     .inBackwardDirection()
-     .fromSource @inputKeypressEvt
-     .toTarget @editStateVar
-     .withTransform (msg) ->
-       msg.map( (e) -> keycode(e) not in ['esc', 'enter'])
+  class EditStateChannel extends Transmitter.Channels.CompositeChannel
+
+    constructor: (@todoView) ->
+
+    @defineChannel ->
+      new Transmitter.Channels.SimpleChannel()
+        .inBackwardDirection()
+        .fromSource @todoView.startEditEvt
+        .toTarget @todoView.editStateVar
+        .withTransform (msg) ->
+          if msg.map? then msg.map( -> yes) else msg
+
+    @defineChannel ->
+      new Transmitter.Channels.SimpleChannel()
+        .inBackwardDirection()
+        .fromSource @todoView.acceptEditEvt
+        .toTarget @todoView.editStateVar
+        .withTransform (msg) ->
+          if msg.map? then msg.map( -> no) else msg
+
+    @defineChannel ->
+      new Transmitter.Channels.SimpleChannel()
+        .inBackwardDirection()
+        .fromSource @todoView.rejectEditEvt
+        .toTarget @todoView.editStateVar
+        .withTransform (msg) ->
+          if msg.map? then msg.map( -> no) else msg
 
 
   createRemoveTodoChannel: ->
@@ -102,12 +147,82 @@ class TodoView extends Transmitter.Nodes.Record
 
 
 
+class TodoViewChannel extends Transmitter.Channels.CompositeChannel
+
+  inspect: ->
+    @todo.inspect() + '<->' + @todoView.inspect()
+
+
+  constructor: (@todo, @todoView) ->
+
+
+  connect: ->
+    console.log 'connect', this.inspect()
+    super
+
+
+  disconnect: ->
+    console.log 'disconnect', this.inspect()
+    super
+
+
+  @defineChannel ->
+    new Transmitter.Channels.VariableChannel()
+      .withOrigin @todo.labelVar
+      .withDerived @todoView.labelVar
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inBackwardDirection()
+      .fromSource @todoView.labelInputVar
+      .fromSource @todoView.acceptEditEvt
+      .toTarget @todo.labelVar
+      .withTransform (payloads) =>
+        label  = payloads.get(@todoView.labelInputVar)
+        accept = payloads.get(@todoView.acceptEditEvt)
+
+        if accept.get? then label else accept
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inForwardDirection()
+      .fromSource @todo.labelVar
+      .fromSource @todoView.startEditEvt
+      .fromSource @todoView.rejectEditEvt
+      .toTarget @todoView.labelInputVar
+      .withTransform (payloads) =>
+        label  = payloads.get(@todo.labelVar)
+        start  = payloads.get(@todoView.startEditEvt)
+        reject = payloads.get(@todoView.rejectEditEvt)
+
+        if start.get? or reject.get?
+          label
+        else
+          Transmitter.Payloads.noop()
+
+
+  @defineChannel ->
+    new Transmitter.Channels.VariableChannel()
+      .withOrigin @todo.isCompletedVar
+      .withDerived @todoView.isCompletedInputVar
+
+
+  @defineChannel ->
+    new Transmitter.Channels.VariableChannel()
+      .inForwardDirection()
+      .withOrigin @todo.isCompletedVar
+      .withDerived @todoView.isCompletedClassVar
+
+
+
 class TodoListView extends Transmitter.Nodes.Record
 
   constructor: (@$element) ->
 
   init: (tr) ->
-    @viewElementListChannel.connect(tr)
+    @viewElementListChannel.init(tr)
 
   @defineLazy 'viewList', ->
     new Transmitter.Nodes.List()
@@ -146,45 +261,17 @@ class TodoListViewChannel extends Transmitter.Channels.CompositeChannel
   @defineChannel ->
     new Transmitter.Channels.ListChannel()
     .withOrigin @todoList
-    .withMapOrigin (todo) -> new TodoView(todo)
-    .initOrigin()
+    .withMapOrigin (todo, tr) -> new TodoView(todo).init(tr)
     .withDerived @todoListView.viewList
     .withMatchOriginDerived (todo, todoView) -> todo == todoView.todo
+    .withMatchOriginDerivedChannel (todo, todoView, channel) ->
+      channel.todo == todo and channel.todoView == todoView
     .withOriginDerivedChannel (todo, todoView) ->
       if todo? and todoView?
+        console.log "new TodoViewChannel(#{todo.inspect()}, #{todoView.inspect()})"
         new TodoViewChannel(todo, todoView)
       else
         Transmitter.Channels.getNullChannel()
-
-
-
-class TodoViewChannel extends Transmitter.Channels.CompositeChannel
-
-  constructor: (@todo, @view) ->
-
-
-  @defineChannel ->
-    new Transmitter.Channels.VariableChannel()
-      .withOrigin @todo.labelVar
-      .withDerived @view.labelVar
-
-
-  @defineChannel ->
-    new Transmitter.Channels.VariableChannel()
-      .withOrigin @todo.labelVar
-      .withDerived @view.labelInputVar
-
-
-  @defineChannel ->
-    new Transmitter.Channels.VariableChannel()
-      .withOrigin @todo.isCompletedVar
-      .withDerived @view.isCompletedInputVar
-
-
-  @defineChannel ->
-    new Transmitter.Channels.VariableChannel()
-      .withOrigin @todo.isCompletedVar
-      .withDerived @view.isCompletedClassVar
 
 
 
@@ -195,7 +282,7 @@ class NewTodoView extends Transmitter.Nodes.Record
 
 
   init: (tr) ->
-    @clearNewTodoLabelInputChannel.connect(tr)
+    @clearNewTodoLabelInputChannel.init(tr)
     return this
 
 
@@ -217,7 +304,6 @@ class NewTodoView extends Transmitter.Nodes.Record
         keypress = payloads.get(@newTodoKeypressEvt)
 
         key = keycode(keypress.get?())
-        console.log key, label.get()
         if key is 'enter'
           todo = new Todo().init(tr, label: label.get())
           Transmitter.Payloads.List.appendConst(todo)
@@ -232,7 +318,6 @@ class NewTodoView extends Transmitter.Nodes.Record
       .toTarget @newTodoLabelInputVar
       .withTransform (keypress) ->
         key = keycode(keypress.get?())
-        console.log key
         if key in ['esc', 'enter']
           Transmitter.Payloads.Variable.setConst('')
         else
@@ -255,17 +340,17 @@ $.Event::inspect = -> '[$Ev ' + @type + ' ... ]'
 Event::inspect = -> '[Ev ' + @type + ' ... ]'
 
 # Transmitter.Transmission::loggingFilter = (msg) ->
-#   msg.match('todoList')
+#   msg.match(/elementList|viewList|todoList/)
 
 Transmitter.Transmission::loggingIsEnabled = no
 
 Transmitter.startTransmission (tr) ->
   todoListView.init(tr)
-  todoListViewChannel.connect(tr)
+  todoListViewChannel.init(tr)
   newTodoView.init(tr)
-  newTodoView.createNewTodoChannel().toTarget(todoList).connect(tr)
+  newTodoView.createNewTodoChannel().toTarget(todoList).init(tr)
 
   todo1 = new Todo().init(tr, label: 'Todo 1')
   todo2 = new Todo().init(tr, label: 'Todo 2', isCompleted: yes)
 
-  todoList.updateState(tr, [todo1, todo2])
+  todoList.init(tr, [todo1, todo2])
