@@ -150,20 +150,10 @@ class TodoView extends Transmitter.Nodes.Record
 class TodoViewChannel extends Transmitter.Channels.CompositeChannel
 
   inspect: ->
-    @todo.inspect() + '<->' + @todoView.inspect()
+    @todo.inspect() + '-' + @todoView.inspect()
 
 
   constructor: (@todo, @todoView) ->
-
-
-  connect: ->
-    console.log 'connect', this.inspect()
-    super
-
-
-  disconnect: ->
-    console.log 'disconnect', this.inspect()
-    super
 
 
   @defineChannel ->
@@ -245,14 +235,21 @@ class TodoListView extends Transmitter.Nodes.Record
 
 class TodoListViewChannel extends Transmitter.Channels.CompositeChannel
 
+  inspect: ->
+    @todoList.inspect() + '-' + @todoListView.inspect()
+
+
   constructor: (@todoList, @todoListView) ->
 
 
+  @defineLazy 'removeTodoChannelList', ->
+    new Transmitter.ChannelNodes.ChannelList()
+
+
   @defineChannel ->
-    removeTodoChannelList = new Transmitter.ChannelNodes.ChannelList()
     new Transmitter.Channels.SimpleChannel()
       .fromSource @todoListView.viewList
-      .toConnectionTarget removeTodoChannelList
+      .toConnectionTarget @removeTodoChannelList
       .withTransform (todoViews) =>
         todoViews.map (todoView) =>
           todoView.createRemoveTodoChannel().toTarget(@todoList)
@@ -267,11 +264,7 @@ class TodoListViewChannel extends Transmitter.Channels.CompositeChannel
     .withMatchOriginDerivedChannel (todo, todoView, channel) ->
       channel.todo == todo and channel.todoView == todoView
     .withOriginDerivedChannel (todo, todoView) ->
-      if todo? and todoView?
-        console.log "new TodoViewChannel(#{todo.inspect()}, #{todoView.inspect()})"
-        new TodoViewChannel(todo, todoView)
-      else
-        Transmitter.Channels.getNullChannel()
+      new TodoViewChannel(todo, todoView)
 
 
 
@@ -325,12 +318,63 @@ class NewTodoView extends Transmitter.Nodes.Record
 
 
 
-window.todoList = new Transmitter.Nodes.List()
+class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel
+
+  constructor: (@nonBlankTodoList, @todoList) ->
+
+  @defineChannel ->
+    new Transmitter.Channels.ListChannel()
+      .inForwardDirection()
+      .withOrigin @nonBlankTodoList
+      .withDerived @todoList
+
+
+  @defineLazy 'nonBlankTodoChannelVar', ->
+    new Transmitter.ChannelNodes.ChannelVariable()
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .fromSource @todoList
+      .toConnectionTarget @nonBlankTodoChannelVar
+      .withTransform (todoList) =>
+        Transmitter.Payloads.Variable.setLazy( =>
+          @createNonBlankTodoChannel(todoList.get())
+            .inBackwardDirection()
+            .toTarget(@nonBlankTodoList)
+        )
+
+
+  nonBlank = (str) -> !!str.trim()
+
+
+  createNonBlankTodoChannel: (todos) ->
+    if todos.length
+      channel = new Transmitter.Channels.SimpleChannel()
+      channel.fromSources(todo.labelVar for todo in todos)
+      channel.withTransform (labels) ->
+        Transmitter.Payloads.List.setLazy ->
+          nonBlankTodos =
+            todos[i] for label, i in labels.values() when nonBlank(label.get())
+          return nonBlankTodos
+    else
+      new Transmitter.Channels.ConstChannel()
+        .withPayload ->
+          Transmitter.Payloads.List.setConst([])
+
+
+
+
+
+window.nonBlankTodoList = new Transmitter.Nodes.List()
+nonBlankTodoList.inspect = -> 'nonBlankTodoList'
+todoList = new Transmitter.Nodes.List()
 todoList.inspect = -> 'todoList'
 
 window.todoListView = new TodoListView($('.todo-list'))
 window.newTodoView = new NewTodoView($('.new-todo'))
 
+nonBlankTodoListChannel = new NonBlankTodoListChannel(nonBlankTodoList, todoList)
 todoListViewChannel = new TodoListViewChannel(todoList, todoListView)
 
 
@@ -339,13 +383,15 @@ Element::inspect = -> '<' + @tagName + ' ... />'
 $.Event::inspect = -> '[$Ev ' + @type + ' ... ]'
 Event::inspect = -> '[Ev ' + @type + ' ... ]'
 
-# Transmitter.Transmission::loggingFilter = (msg) ->
-#   msg.match(/elementList|viewList|todoList/)
+Transmitter.Transmission::loggingFilter = (msg) ->
+  msg.match(/nonBlankTodoList|todoList/)
+  # msg.match(/label(Input)?Var|MM/)
 
 Transmitter.Transmission::loggingIsEnabled = no
 
 Transmitter.startTransmission (tr) ->
   todoListView.init(tr)
+  nonBlankTodoListChannel.init(tr)
   todoListViewChannel.init(tr)
   newTodoView.init(tr)
   newTodoView.createNewTodoChannel().toTarget(todoList).init(tr)
