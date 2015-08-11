@@ -318,6 +318,37 @@ class NewTodoView extends Transmitter.Nodes.Record
 
 
 
+class TodoListFooterView extends Transmitter.Nodes.Record
+
+  constructor: (@$element) ->
+
+
+  @defineLazy 'completeCountVar', ->
+    new Transmitter.DOMElement.TextVar(@$element.find('.todo-count')[0])
+
+
+
+class TodoListFooterViewChannel extends Transmitter.Channels.CompositeChannel
+
+  constructor: (@todoListWithComplete, @todoListFooterView) ->
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inForwardDirection()
+      .fromSource @todoListWithComplete
+      .toTarget @todoListFooterView.completeCountVar
+      .withTransform (todoListWithComplete) ->
+        Transmitter.Payloads.Variable.setLazy(->
+          count = todoListWithComplete.get()
+            .filter(([todo, isCompleted]) -> !isCompleted)
+            .length
+          items = if count is 1 then 'item' else 'items'
+          "#{count} #{items} left"
+        ).setPriority(todoListWithComplete.getPriority())
+
+
+
 class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel
 
   constructor: (@nonBlankTodoList, @todoList) ->
@@ -364,6 +395,40 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel
 
 
 
+class TodoListWithCompleteChannel extends Transmitter.Channels.CompositeChannel
+
+  constructor: (@todoList, @todoListWithComplete) ->
+
+
+  @defineLazy 'withCompleteChannelVar', ->
+    new Transmitter.ChannelNodes.ChannelVariable()
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .fromSource @todoList
+      .toConnectionTarget @withCompleteChannelVar
+      .withTransform (todoList) =>
+        Transmitter.Payloads.Variable.setLazy( =>
+          @createWithCompleteChannel(todoList.get())
+            .inForwardDirection()
+            .toTarget(@todoListWithComplete)
+        )
+
+
+  createWithCompleteChannel: (todos) ->
+    if todos.length
+      channel = new Transmitter.Channels.SimpleChannel()
+      channel.fromSources(todo.isCompletedVar for todo in todos)
+      channel.withTransform (isCompletedList) ->
+        Transmitter.Payloads.List.setLazy ->
+          for isCompleted, i in isCompletedList.values()
+            [todos[i], isCompleted.get()]
+    else
+      new Transmitter.Channels.ConstChannel()
+        .withPayload ->
+          Transmitter.Payloads.List.setConst([])
+
 
 
 window.nonBlankTodoList = new Transmitter.Nodes.List()
@@ -371,11 +436,21 @@ nonBlankTodoList.inspect = -> 'nonBlankTodoList'
 todoList = new Transmitter.Nodes.List()
 todoList.inspect = -> 'todoList'
 
+
+todoListWithComplete = new Transmitter.Nodes.List()
+todoListWithComplete.inspect = -> 'todoListWithComplete'
+todoListWithCompleteChannel =
+  new TodoListWithCompleteChannel(todoList, todoListWithComplete)
+
 window.todoListView = new TodoListView($('.todo-list'))
 window.newTodoView = new NewTodoView($('.new-todo'))
 
+todoListFooterView = new TodoListFooterView($('.footer'))
+
 nonBlankTodoListChannel = new NonBlankTodoListChannel(nonBlankTodoList, todoList)
 todoListViewChannel = new TodoListViewChannel(todoList, todoListView)
+todoListFooterViewChannel =
+  new TodoListFooterViewChannel(todoListWithComplete, todoListFooterView)
 
 
 
@@ -384,7 +459,7 @@ $.Event::inspect = -> '[$Ev ' + @type + ' ... ]'
 Event::inspect = -> '[Ev ' + @type + ' ... ]'
 
 Transmitter.Transmission::loggingFilter = (msg) ->
-  msg.match(/nonBlankTodoList|todoList/)
+  msg.match(/isCompletedInputVar/i)
   # msg.match(/label(Input)?Var|MM/)
 
 Transmitter.Transmission::loggingIsEnabled = no
@@ -392,11 +467,13 @@ Transmitter.Transmission::loggingIsEnabled = no
 Transmitter.startTransmission (tr) ->
   todoListView.init(tr)
   nonBlankTodoListChannel.init(tr)
+  todoListWithCompleteChannel.init(tr)
   todoListViewChannel.init(tr)
+  todoListFooterViewChannel.init(tr)
   newTodoView.init(tr)
   newTodoView.createNewTodoChannel().toTarget(todoList).init(tr)
 
-  todo1 = new Todo().init(tr, label: 'Todo 1')
+  todo1 = new Todo().init(tr, label: 'Todo 1', isCompleted: no)
   todo2 = new Todo().init(tr, label: 'Todo 2', isCompleted: yes)
 
   todoList.init(tr, [todo1, todo2])
