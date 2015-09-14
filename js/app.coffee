@@ -7,6 +7,11 @@ keycode = require 'keycode'
 
 window.Transmitter = require 'transmitter'
 
+class VisibilityToggleVar extends Transmitter.Nodes.Variable
+  constructor: (@$element) ->
+  set: (state) -> @$element.toggle(!!state); this
+  get: -> @$element.is(':visible')
+
 
 class Todo extends Transmitter.Nodes.Record
 
@@ -328,11 +333,6 @@ class TodoListFooterView extends Transmitter.Nodes.Record
     new Transmitter.DOMElement.TextVar(@$element.find('.todo-count')[0])
 
 
-  class VisibilityToggleVar extends Transmitter.Nodes.Variable
-    constructor: (@$element) ->
-    set: (state) -> @$element.toggle(!!state); this
-    get: -> @$element.is(':visible')
-
   @defineLazy 'clearCompletedIsVisibleVar', ->
     new VisibilityToggleVar(@$element.find('.clear-completed'))
 
@@ -340,6 +340,10 @@ class TodoListFooterView extends Transmitter.Nodes.Record
   @defineLazy 'clearCompletedClickEvt', ->
     new Transmitter.DOMElement
       .DOMEvent(@$element.find('.clear-completed')[0], 'click')
+
+
+  @defineLazy 'isVisibleVar', ->
+    new VisibilityToggleVar(@$element)
 
 
 
@@ -392,6 +396,17 @@ class TodoListFooterViewChannel extends Transmitter.Channels.CompositeChannel
             .map ([todo]) -> todo
         else
           clearCompleted
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inForwardDirection()
+      .fromSource @todoList
+      .toTarget @todoListFooterView.isVisibleVar
+      .withTransform (payload) ->
+        Transmitter.Payloads.Variable.setLazy ->
+          payload.get().length > 0
+
 
 
 
@@ -562,8 +577,20 @@ window.toggleAllCheckboxVar =
 window.toggleAllChangeEvt =
   new Transmitter.DOMElement.DOMEvent($('.toggle-all')[0], 'click')
 
+window.toggleAllIsVisibleVar = 
+  new VisibilityToggleVar($('.toggle-all'))
+
 toggleAllChannel =
   new ToggleAllChannel(todoList, todoListWithComplete, toggleAllCheckboxVar, toggleAllChangeEvt)
+
+toggleAllIsVisibleChannel =
+  new Transmitter.Channels.SimpleChannel()
+    .inForwardDirection()
+    .fromSource todoList
+    .toTarget toggleAllIsVisibleVar
+    .withTransform (payload) ->
+      Transmitter.Payloads.Variable.setLazy ->
+        payload.get().length > 0
 
 todoListFooterView = new TodoListFooterView($('.footer'))
 
@@ -591,6 +618,7 @@ Transmitter.startTransmission (tr) ->
   todoListViewChannel.init(tr)
   todoListFooterViewChannel.init(tr)
   toggleAllChannel.init(tr)
+  toggleAllIsVisibleChannel.init(tr)
   newTodoView.init(tr)
   newTodoView.createNewTodoChannel().toTarget(todoList).init(tr)
 
