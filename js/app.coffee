@@ -251,12 +251,13 @@ class TodoListViewChannel extends Transmitter.Channels.CompositeChannel
       .fromSource @todoListView.viewList
       .toConnectionTarget @removeTodoChannelList
       .withTransform (todoViews) =>
-        todoViews.map (todoView) =>
+        todoViews?.map (todoView) =>
           todoView.createRemoveTodoChannel().toTarget(@todoList)
 
 
   @defineChannel ->
     new Transmitter.Channels.ListChannel()
+    .inForwardDirection()
     .withOrigin @todoList
     .withMapOrigin (todo, tr) -> new TodoView(todo).init(tr)
     .withDerived @todoListView.viewList
@@ -327,10 +328,24 @@ class TodoListFooterView extends Transmitter.Nodes.Record
     new Transmitter.DOMElement.TextVar(@$element.find('.todo-count')[0])
 
 
+  class VisibilityToggleVar extends Transmitter.Nodes.Variable
+    constructor: (@$element) ->
+    set: (state) -> @$element.toggle(!!state); this
+    get: -> @$element.is(':visible')
+
+  @defineLazy 'clearCompletedIsVisibleVar', ->
+    new VisibilityToggleVar(@$element.find('.clear-completed'))
+
+
+  @defineLazy 'clearCompletedClickEvt', ->
+    new Transmitter.DOMElement
+      .DOMEvent(@$element.find('.clear-completed')[0], 'click')
+
+
 
 class TodoListFooterViewChannel extends Transmitter.Channels.CompositeChannel
 
-  constructor: (@todoListWithComplete, @todoListFooterView) ->
+  constructor: (@todoList, @todoListWithComplete, @todoListFooterView) ->
 
 
   @defineChannel ->
@@ -345,7 +360,87 @@ class TodoListFooterViewChannel extends Transmitter.Channels.CompositeChannel
             .length
           items = if count is 1 then 'item' else 'items'
           "#{count} #{items} left"
-        ).setPriority(todoListWithComplete.getPriority())
+        )
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inForwardDirection()
+      .fromSource @todoListWithComplete
+      .toTarget @todoListFooterView.clearCompletedIsVisibleVar
+      .withTransform (todoListWithComplete) ->
+        Transmitter.Payloads.Variable.setLazy(->
+          count = todoListWithComplete.get()
+            .filter(([todo, isCompleted]) -> isCompleted)
+            .length
+          count > 0
+        )
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inBackwardDirection()
+      .fromSource @todoListFooterView.clearCompletedClickEvt
+      .fromSource @todoListWithComplete
+      .toTarget @todoList
+      .withTransform (payloads) =>
+        clearCompleted = payloads.get(@todoListFooterView.clearCompletedClickEvt)
+        todoListWithComplete = payloads.get(@todoListWithComplete)
+        if clearCompleted.get?
+          todoListWithComplete
+            .filter ([todo, isCompleted]) -> !isCompleted
+            .map ([todo]) -> todo
+        else
+          clearCompleted
+
+
+
+class ToggleAllChannel extends Transmitter.Channels.CompositeChannel
+
+  constructor:
+    (@todoList, @todoListWithComplete, @toggleAllCheckboxVar, @toggleAllChangeEvt) ->
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inForwardDirection()
+      .fromSource @todoListWithComplete
+      .toTarget @toggleAllCheckboxVar
+      .withTransform (todoListWithComplete) ->
+        Transmitter.Payloads.Variable.setLazy( ->
+          todoListWithComplete.get().every ([todo, isCompleted]) -> isCompleted
+        )
+
+
+  @defineLazy 'toggleAllChannelVar', ->
+    new Transmitter.ChannelNodes.ChannelVariable()
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .fromSource @todoList
+      .toConnectionTarget @toggleAllChannelVar
+      .withTransform (todoList) =>
+        return null unless todoList?
+        Transmitter.Payloads.Variable.setLazy =>
+          @createToggleAllChannel()
+            .inBackwardDirection()
+            .toTargets todoList.map(({isCompletedVar}) -> isCompletedVar).get()
+
+
+  createToggleAllChannel: ->
+    new Transmitter.Channels.SimpleChannel()
+      .fromSource @toggleAllCheckboxVar
+      .fromSource @toggleAllChangeEvt
+      .withTransform (payloads, isCompleted) =>
+        isCompletedState = payloads.get(@toggleAllCheckboxVar)
+        changed = payloads.get(@toggleAllChangeEvt)
+        payload = if changed.get?
+          isCompletedState.map((state) -> !state)
+        else
+          changed
+
+        for key in isCompleted.keys()
+          isCompleted.set(key, payload)
 
 
 
@@ -370,7 +465,11 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel
       .toConnectionTarget @nonBlankTodoChannelVar
       .withTransform (todoList) =>
         Transmitter.Payloads.Variable.setLazy( =>
-          @createNonBlankTodoChannel(todoList.get())
+          channel = if todoList?
+            @createNonBlankTodoChannel(todoList.get())
+          else
+            new Transmitter.Channels.PlaceholderChannel()
+          channel
             .inBackwardDirection()
             .toTarget(@nonBlankTodoList)
         )
@@ -406,11 +505,24 @@ class TodoListWithCompleteChannel extends Transmitter.Channels.CompositeChannel
 
   @defineChannel ->
     new Transmitter.Channels.SimpleChannel()
+      .inBackwardDirection()
+      .fromSource @todoListWithComplete
+      .toTarget @todoList
+      .withTransform (todoListWithComplete) =>
+        todoListWithComplete.map ([todo]) -> todo
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
       .fromSource @todoList
       .toConnectionTarget @withCompleteChannelVar
       .withTransform (todoList) =>
         Transmitter.Payloads.Variable.setLazy( =>
-          @createWithCompleteChannel(todoList.get())
+          channel = if todoList?
+            @createWithCompleteChannel(todoList.get())
+          else
+            new Transmitter.Channels.PlaceholderChannel()
+          channel
             .inForwardDirection()
             .toTarget(@todoListWithComplete)
         )
@@ -444,13 +556,21 @@ todoListWithCompleteChannel =
 
 window.todoListView = new TodoListView($('.todo-list'))
 window.newTodoView = new NewTodoView($('.new-todo'))
+window.toggleAllCheckboxVar =
+  new Transmitter.DOMElement.CheckboxStateVar($('.toggle-all')[0])
+
+window.toggleAllChangeEvt =
+  new Transmitter.DOMElement.DOMEvent($('.toggle-all')[0], 'click')
+
+toggleAllChannel =
+  new ToggleAllChannel(todoList, todoListWithComplete, toggleAllCheckboxVar, toggleAllChangeEvt)
 
 todoListFooterView = new TodoListFooterView($('.footer'))
 
 nonBlankTodoListChannel = new NonBlankTodoListChannel(nonBlankTodoList, todoList)
 todoListViewChannel = new TodoListViewChannel(todoList, todoListView)
 todoListFooterViewChannel =
-  new TodoListFooterViewChannel(todoListWithComplete, todoListFooterView)
+  new TodoListFooterViewChannel(todoList, todoListWithComplete, todoListFooterView)
 
 
 
@@ -459,10 +579,10 @@ $.Event::inspect = -> '[$Ev ' + @type + ' ... ]'
 Event::inspect = -> '[Ev ' + @type + ' ... ]'
 
 Transmitter.Transmission::loggingFilter = (msg) ->
-  msg.match(/isCompletedInputVar/i)
+  msg.match(/todoList\b|viewList/)
   # msg.match(/label(Input)?Var|MM/)
 
-Transmitter.Transmission::loggingIsEnabled = no
+# Transmitter.Transmission::loggingIsEnabled = yes
 
 Transmitter.startTransmission (tr) ->
   todoListView.init(tr)
@@ -470,6 +590,7 @@ Transmitter.startTransmission (tr) ->
   todoListWithCompleteChannel.init(tr)
   todoListViewChannel.init(tr)
   todoListFooterViewChannel.init(tr)
+  toggleAllChannel.init(tr)
   newTodoView.init(tr)
   newTodoView.createNewTodoChannel().toTarget(todoList).init(tr)
 
