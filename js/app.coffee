@@ -5,6 +5,7 @@
 $ = require 'jquery'
 keycode = require 'keycode'
 
+window.JQuery = $
 window.Transmitter = require 'transmitter'
 
 class VisibilityToggleVar extends Transmitter.Nodes.Variable
@@ -244,7 +245,7 @@ class TodoListViewChannel extends Transmitter.Channels.CompositeChannel
     @todoList.inspect() + '-' + @todoListView.inspect()
 
 
-  constructor: (@todoList, @todoListView) ->
+  constructor: (@todoList, @todoListWithComplete, @todoListView, @activeFilter) ->
 
 
   @defineLazy 'removeTodoChannelList', ->
@@ -257,13 +258,37 @@ class TodoListViewChannel extends Transmitter.Channels.CompositeChannel
       .toConnectionTarget @removeTodoChannelList
       .withTransform (todoViews) =>
         todoViews?.map (todoView) =>
-          todoView.createRemoveTodoChannel().toTarget(@todoList)
+          todoView.createRemoveTodoChannel()
+            .toTarget(@todoList)
+
+
+  @defineLazy 'filteredTodoList', ->
+    new Transmitter.Nodes.List()
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inForwardDirection()
+      .fromSource @todoListWithComplete
+      .fromSource @activeFilter
+      .toTarget @filteredTodoList
+      .withTransform (payloads) =>
+        todoListPayload = payloads.get(@todoListWithComplete)
+        activeFilterPayload = payloads.get(@activeFilter)
+        filter = activeFilterPayload.get()
+        todoListPayload
+          .filter ([todo, isCompleted]) ->
+            switch filter
+              when 'active'    then !isCompleted
+              when 'completed' then isCompleted
+              else true
+          .map ([todo]) -> todo
 
 
   @defineChannel ->
     new Transmitter.Channels.ListChannel()
     .inForwardDirection()
-    .withOrigin @todoList
+    .withOrigin @filteredTodoList
     .withMapOrigin (todo, tr) -> new TodoView(todo).init(tr)
     .withDerived @todoListView.viewList
     .withMatchOriginDerived (todo, todoView) -> todo == todoView.todo
@@ -345,11 +370,30 @@ class TodoListFooterView extends Transmitter.Nodes.Record
   @defineLazy 'isVisibleVar', ->
     new VisibilityToggleVar(@$element)
 
+  @defineLazy 'activeFilter', ->
+    $filters = @$element.find('.filters')
+    new class ActiveFilterSelector extends Transmitter.Nodes.Variable
+      get: ->
+        ($filters.find('a.selected').attr('href') ? '')
+          .match(/\w*$/)[0] || 'all'
+      set: (filter) ->
+        filter = '' if filter is 'all'
+        $filters.find('a').removeClass('selected')
+          .filter("[href='#/#{filter}']").addClass('selected')
+
 
 
 class TodoListFooterViewChannel extends Transmitter.Channels.CompositeChannel
 
-  constructor: (@todoList, @todoListWithComplete, @todoListFooterView) ->
+  constructor:
+    (@todoList, @todoListWithComplete, @todoListFooterView, @activeFilter) ->
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inForwardDirection()
+      .fromSource @activeFilter
+      .toTarget @todoListFooterView.activeFilter
 
 
   @defineChannel ->
@@ -739,12 +783,29 @@ toggleAllIsVisibleChannel =
       Transmitter.Payloads.Variable.setLazy ->
         payload.get().length > 0
 
+locationHash = new Transmitter.Browser.LocationHash()
+activeFilter = new Transmitter.Nodes.Variable()
+activeFilter.inspect = -> 'activeFilter'
+
+locationHashChannel = new Transmitter.Channels.SimpleChannel()
+  .inBackwardDirection()
+  .fromSource locationHash
+  .toTarget activeFilter
+  .withTransform (locationHashPayload) ->
+    locationHashPayload.map (value) ->
+      switch value
+        when '#/active' then 'active'
+        when '#/completed' then 'completed'
+        else 'all'
+
+
 todoListFooterView = new TodoListFooterView($('.footer'))
 
 nonBlankTodoListChannel = new NonBlankTodoListChannel(nonBlankTodoList, todoList)
-todoListViewChannel = new TodoListViewChannel(todoList, todoListView)
-todoListFooterViewChannel =
-  new TodoListFooterViewChannel(todoList, todoListWithComplete, todoListFooterView)
+todoListViewChannel = new TodoListViewChannel(
+  todoList, todoListWithComplete, todoListView, activeFilter)
+todoListFooterViewChannel = new TodoListFooterViewChannel(
+  todoList, todoListWithComplete, todoListFooterView, activeFilter)
 
 
 
@@ -753,10 +814,10 @@ $.Event::inspect = -> '[$Ev ' + @type + ' ... ]'
 Event::inspect = -> '[Ev ' + @type + ' ... ]'
 
 Transmitter.Transmission::loggingFilter = (msg) ->
-  msg.match(/todoListPersistenceVar/)
+  msg.match(/activeFilter/)
   # msg.match(/label(Input)?Var|MM/)
 
-# Transmitter.Transmission::loggingIsEnabled = yes
+Transmitter.Transmission::loggingIsEnabled = no
 
 Transmitter.startTransmission (tr) ->
   todoListView.init(tr)
@@ -769,6 +830,9 @@ Transmitter.startTransmission (tr) ->
   toggleAllIsVisibleChannel.init(tr)
   newTodoView.init(tr)
   newTodoView.createNewTodoChannel().toTarget(todoList).init(tr)
+
+  locationHashChannel.init(tr)
+  locationHash.originate(tr)
 
   unless todoListPersistenceVar.get()
     todoListPersistenceVar.set(
