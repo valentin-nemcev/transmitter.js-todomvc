@@ -558,10 +558,157 @@ class TodoListWithCompleteChannel extends Transmitter.Channels.CompositeChannel
 
 
 
+class SerializedTodoChannel extends Transmitter.Channels.CompositeChannel
+
+  constructor: (@todo, @serializedTodoVar) ->
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inForwardDirection()
+      .fromSource @todo.labelVar
+      .fromSource @todo.isCompletedVar
+      .toTarget @serializedTodoVar
+      .withTransform (payloads) =>
+        label = payloads.get(@todo.labelVar)
+        isCompleted = payloads.get(@todo.isCompletedVar)
+        Transmitter.Payloads.Variable.setLazy ->
+          {title: label.get(), completed: isCompleted.get()}
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inBackwardDirection()
+      .fromSource @serializedTodoVar
+      .toTarget @todo.labelVar
+      .toTarget @todo.isCompletedVar
+      .withTransform (serializedTodo, todoPayload) =>
+        todoPayload.set(@todo.labelVar,
+          Transmitter.Payloads.Variable.setLazy ->
+            serializedTodo.get()?.title
+        )
+        todoPayload.set(@todo.isCompletedVar,
+          Transmitter.Payloads.Variable.setLazy ->
+            serializedTodo.get()?.completed
+        )
+
+
+
+class TodoListPersistenceChannel extends Transmitter.Channels.CompositeChannel
+
+  constructor: (@todoList, @todoListPersistenceVar) ->
+
+
+  @defineLazy 'todoPersistenceChannelVar', ->
+    new Transmitter.ChannelNodes.ChannelVariable()
+
+
+  @defineLazy 'serializedTodoList', ->
+    new Transmitter.Nodes.List()
+
+  @defineLazy 'serializedTodosVar', ->
+    new Transmitter.Nodes.Variable()
+
+
+  @defineChannel ->
+    new Transmitter.Channels.VariableChannel()
+      .withOrigin @serializedTodosVar
+      .withDerived @todoListPersistenceVar
+      .withMapOrigin (serializedTodos) ->
+        JSON.stringify(serializedTodos)
+      .withMapDerived (persistedTodos) ->
+        JSON.parse(persistedTodos)
+
+
+  serializedId = 0
+  @defineChannel ->
+    new Transmitter.Channels.ListChannel()
+      .withOrigin @todoList
+      .withMapOrigin (todo) ->
+        serializedVar = new Transmitter.Nodes.Variable()
+        serializedVar.todo = todo
+        id = serializedId++
+        serializedVar.inspect = -> "[serializedTodoVar#{id} #{@todo}]"
+        return serializedVar
+      .withDerived @serializedTodoList
+      .withMapDerived (serializedVar) ->
+        todo = new Todo()
+        serializedVar.todo = todo
+        return todo
+      .withMatchOriginDerived (todo, serializedTodoVar) ->
+        todo == serializedTodoVar.todo
+      .withOriginDerivedChannel (todo, serializedTodoVar) ->
+        new SerializedTodoChannel(todo, serializedTodoVar)
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inBackwardDirection()
+      .fromSource @serializedTodosVar
+      .toTarget @serializedTodoList
+      .withTransform (serializedTodos) ->
+        Transmitter.Payloads.List.setLazy ->
+          serializedTodos.get().map ->
+            v = new Transmitter.Nodes.Variable()
+            id = serializedId++
+            v.inspect = -> "[serializedTodoVar#{id} #{@todo}]"
+            return v
+
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .fromSource @serializedTodoList
+      .toConnectionTarget @todoPersistenceChannelVar
+      .withTransform (serializedTodoList) =>
+        Transmitter.Payloads.Variable.setLazy =>
+          if serializedTodoList?
+            @createTodoPersistenceChannel(serializedTodoList.get())
+          else
+            new Transmitter.Channels.PlaceholderChannel()
+
+
+  createTodoPersistenceChannel: (serializedTodoVars) ->
+    if serializedTodoVars.length
+      new Transmitter.Channels.CompositeChannel()
+        .defineChannel =>
+          new Transmitter.Channels.SimpleChannel()
+            .inBackwardDirection()
+            .fromSource @serializedTodosVar
+            .toTargets(serializedTodoVars)
+            .withTransform (serializedTodos, serializedTodoVarsPayload) ->
+              todos = serializedTodos.get()
+              todos = [] unless todos?.length?
+              for todoValue, i in todos
+                serializedTodoVarsPayload.set(serializedTodoVars[i],
+                  new Transmitter.Payloads.Variable.setConst(todoValue))
+
+        .defineChannel =>
+          new Transmitter.Channels.SimpleChannel()
+            .inForwardDirection()
+            .fromSources(serializedTodoVars)
+            .toTarget @serializedTodosVar
+            .withTransform (serializedTodos) ->
+              Transmitter.Payloads.Variable.setLazy ->
+                serializedTodos.values().map (v) -> v.get()
+    else
+      new Transmitter.Channels.ConstChannel()
+        .inForwardDirection()
+        .toTarget @serializedTodosVar
+        .withPayload ->
+          Transmitter.Payloads.Variable.setConst([])
+
+
+
 window.nonBlankTodoList = new Transmitter.Nodes.List()
 nonBlankTodoList.inspect = -> 'nonBlankTodoList'
 todoList = new Transmitter.Nodes.List()
 todoList.inspect = -> 'todoList'
+
+todoListPersistenceVar =
+  new Transmitter.Nodes.PropertyVariable(localStorage, 'todos-transmitter')
+todoListPersistenceVar.inspect = -> 'todoListPersistenceVar'
+todoListPersistenceChannel =
+  new TodoListPersistenceChannel(todoList, todoListPersistenceVar)
 
 
 todoListWithComplete = new Transmitter.Nodes.List()
@@ -577,7 +724,7 @@ window.toggleAllCheckboxVar =
 window.toggleAllChangeEvt =
   new Transmitter.DOMElement.DOMEvent($('.toggle-all')[0], 'click')
 
-window.toggleAllIsVisibleVar = 
+window.toggleAllIsVisibleVar =
   new VisibilityToggleVar($('.toggle-all'))
 
 toggleAllChannel =
@@ -606,7 +753,7 @@ $.Event::inspect = -> '[$Ev ' + @type + ' ... ]'
 Event::inspect = -> '[Ev ' + @type + ' ... ]'
 
 Transmitter.Transmission::loggingFilter = (msg) ->
-  msg.match(/todoList\b|viewList/)
+  msg.match(/todoListPersistenceVar/)
   # msg.match(/label(Input)?Var|MM/)
 
 # Transmitter.Transmission::loggingIsEnabled = yes
@@ -615,6 +762,7 @@ Transmitter.startTransmission (tr) ->
   todoListView.init(tr)
   nonBlankTodoListChannel.init(tr)
   todoListWithCompleteChannel.init(tr)
+  todoListPersistenceChannel.init(tr)
   todoListViewChannel.init(tr)
   todoListFooterViewChannel.init(tr)
   toggleAllChannel.init(tr)
@@ -622,7 +770,15 @@ Transmitter.startTransmission (tr) ->
   newTodoView.init(tr)
   newTodoView.createNewTodoChannel().toTarget(todoList).init(tr)
 
-  todo1 = new Todo().init(tr, label: 'Todo 1', isCompleted: no)
-  todo2 = new Todo().init(tr, label: 'Todo 2', isCompleted: yes)
+  unless todoListPersistenceVar.get()
+    todoListPersistenceVar.set(
+      JSON.stringify([{title: 'Todo 1', completed: no},
+      {title: 'Todo 2', completed: yes}])
+    )
 
-  todoList.init(tr, [todo1, todo2])
+  todoListPersistenceVar.originate(tr)
+
+  # todo1 = new Todo().init(tr, label: 'Todo 1', isCompleted: no)
+  # todo2 = new Todo().init(tr, label: 'Todo 2', isCompleted: yes)
+
+  # todoList.init(tr, [todo1, todo2])
