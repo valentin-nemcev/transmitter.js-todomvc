@@ -6,7 +6,7 @@ $ = require 'jquery'
 
 Transmitter = require 'transmitter'
 
-{VisibilityToggleVar, ClassToggleVar} = require './helpers'
+{VisibilityToggleVar, ClassToggleVar} = require '../helpers'
 
 
 class TodoView extends Transmitter.Nodes.Record
@@ -186,7 +186,7 @@ class TodoViewChannel extends Transmitter.Channels.CompositeChannel
 
 
 
-class exports.TodoListView extends Transmitter.Nodes.Record
+module.exports = class MainView extends Transmitter.Nodes.Record
 
   constructor: (@$element) ->
 
@@ -197,7 +197,7 @@ class exports.TodoListView extends Transmitter.Nodes.Record
     new Transmitter.Nodes.List()
 
   @defineLazy 'elementList', ->
-    new Transmitter.DOMElement.ChildrenList(@$element[0])
+    new Transmitter.DOMElement.ChildrenList(@$element.find('.todo-list')[0])
 
   @defineLazy 'viewElementListChannel', ->
     new Transmitter.Channels.SimpleChannel()
@@ -210,9 +210,70 @@ class exports.TodoListView extends Transmitter.Nodes.Record
           (view, element) -> view.$element[0] == element
         )
 
+  @defineLazy 'toggleAllCheckboxVar', ->
+    new Transmitter.DOMElement.CheckboxStateVar(@$element.find('.toggle-all')[0])
+
+  @defineLazy 'toggleAllChangeEvt', ->
+    new Transmitter.DOMElement.DOMEvent(@$element.find('.toggle-all')[0], 'click')
+
+  @defineLazy 'isVisibleVar', ->
+    new VisibilityToggleVar(@$element)
+
+  createTodoListChannel: (todoList, todoListWithComplete, activeFilter) ->
+    new MainViewChannel(todoList, todoListWithComplete, this, activeFilter)
 
 
-class exports.TodoListViewChannel extends Transmitter.Channels.CompositeChannel
+
+class ToggleAllChannel extends Transmitter.Channels.CompositeChannel
+
+  constructor:
+    (@todoList, @todoListWithComplete, @toggleAllCheckboxVar, @toggleAllChangeEvt) ->
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .inForwardDirection()
+      .fromSource @todoListWithComplete
+      .toTarget @toggleAllCheckboxVar
+      .withTransform (todoListWithComplete) ->
+        Transmitter.Payloads.Variable.setLazy( ->
+          todoListWithComplete.get().every ([todo, isCompleted]) -> isCompleted
+        )
+
+
+  @defineLazy 'toggleAllChannelVar', ->
+    new Transmitter.ChannelNodes.ChannelVariable()
+
+
+  @defineChannel ->
+    new Transmitter.Channels.SimpleChannel()
+      .fromSource @todoList
+      .toConnectionTarget @toggleAllChannelVar
+      .withTransform (todoList) =>
+        return null unless todoList?
+        Transmitter.Payloads.Variable.setLazy =>
+          @createToggleAllChannel()
+            .inBackwardDirection()
+            .toTargets todoList.map(({isCompletedVar}) -> isCompletedVar).get()
+
+
+  createToggleAllChannel: ->
+    new Transmitter.Channels.SimpleChannel()
+      .fromSource @toggleAllCheckboxVar
+      .fromSource @toggleAllChangeEvt
+      .withTransform (payloads, isCompleted) =>
+        isCompletedState = payloads.get(@toggleAllCheckboxVar)
+        changed = payloads.get(@toggleAllChangeEvt)
+        payload = if changed.get?
+          isCompletedState.map((state) -> !state)
+        else
+          changed
+
+        for key in isCompleted.keys()
+          isCompleted.set(key, payload)
+
+
+
+class MainViewChannel extends Transmitter.Channels.CompositeChannel
 
   inspect: ->
     @todoList.inspect() + '-' + @todoListView.inspect()
@@ -271,205 +332,18 @@ class exports.TodoListViewChannel extends Transmitter.Channels.CompositeChannel
       new TodoViewChannel(todo, todoView)
 
 
-
-class exports.NewTodoView extends Transmitter.Nodes.Record
-
-  constructor: (@$element) ->
-    @element = @$element[0]
-
-
-  init: (tr) ->
-    @clearNewTodoLabelInputChannel.init(tr)
-    return this
-
-
-  @defineLazy 'newTodoLabelInputVar', ->
-    new Transmitter.DOMElement.InputValueVar(@element)
-
-
-  @defineLazy 'newTodoKeypressEvt', ->
-    new Transmitter.DOMElement.DOMEvent(@element, 'keyup')
-
-
-  createNewTodoChannel: ->
-    new Transmitter.Channels.SimpleChannel()
-      .inBackwardDirection()
-      .fromSource @newTodoLabelInputVar
-      .fromSource @newTodoKeypressEvt
-      .withTransform (payloads, tr) =>
-        label    = payloads.get(@newTodoLabelInputVar)
-        keypress = payloads.get(@newTodoKeypressEvt)
-
-        key = keycode(keypress.get?())
-        if key is 'enter'
-          todo = new Todo().init(tr, label: label.get())
-          Transmitter.Payloads.List.appendConst(todo)
-        else
-          Transmitter.Payloads.noop()
-
-
-  @defineLazy 'clearNewTodoLabelInputChannel', ->
-    new Transmitter.Channels.SimpleChannel()
-      .inForwardDirection()
-      .fromSource @newTodoKeypressEvt
-      .toTarget @newTodoLabelInputVar
-      .withTransform (keypress) ->
-        key = keycode(keypress.get?())
-        if key in ['esc', 'enter']
-          Transmitter.Payloads.Variable.setConst('')
-        else
-          Transmitter.Payloads.noop()
-
-
-
-class exports.TodoListFooterView extends Transmitter.Nodes.Record
-
-  constructor: (@$element) ->
-
-
-  @defineLazy 'completeCountVar', ->
-    new Transmitter.DOMElement.TextVar(@$element.find('.todo-count')[0])
-
-
-  @defineLazy 'clearCompletedIsVisibleVar', ->
-    new VisibilityToggleVar(@$element.find('.clear-completed'))
-
-
-  @defineLazy 'clearCompletedClickEvt', ->
-    new Transmitter.DOMElement
-      .DOMEvent(@$element.find('.clear-completed')[0], 'click')
-
-
-  @defineLazy 'isVisibleVar', ->
-    new VisibilityToggleVar(@$element)
-
-  @defineLazy 'activeFilter', ->
-    $filters = @$element.find('.filters')
-    new class ActiveFilterSelector extends Transmitter.Nodes.Variable
-      get: ->
-        ($filters.find('a.selected').attr('href') ? '')
-          .match(/\w*$/)[0] || 'all'
-      set: (filter) ->
-        filter = '' if filter is 'all'
-        $filters.find('a').removeClass('selected')
-          .filter("[href='#/#{filter}']").addClass('selected')
-
-
-
-class exports.TodoListFooterViewChannel extends Transmitter.Channels.CompositeChannel
-
-  constructor:
-    (@todoList, @todoListWithComplete, @todoListFooterView, @activeFilter) ->
-
-
   @defineChannel ->
-    new Transmitter.Channels.SimpleChannel()
-      .inForwardDirection()
-      .fromSource @activeFilter
-      .toTarget @todoListFooterView.activeFilter
-
-
-  @defineChannel ->
-    new Transmitter.Channels.SimpleChannel()
-      .inForwardDirection()
-      .fromSource @todoListWithComplete
-      .toTarget @todoListFooterView.completeCountVar
-      .withTransform (todoListWithComplete) ->
-        Transmitter.Payloads.Variable.setLazy(->
-          count = todoListWithComplete.get()
-            .filter(([todo, isCompleted]) -> !isCompleted)
-            .length
-          items = if count is 1 then 'item' else 'items'
-          "#{count} #{items} left"
-        )
-
-
-  @defineChannel ->
-    new Transmitter.Channels.SimpleChannel()
-      .inForwardDirection()
-      .fromSource @todoListWithComplete
-      .toTarget @todoListFooterView.clearCompletedIsVisibleVar
-      .withTransform (todoListWithComplete) ->
-        Transmitter.Payloads.Variable.setLazy(->
-          count = todoListWithComplete.get()
-            .filter(([todo, isCompleted]) -> isCompleted)
-            .length
-          count > 0
-        )
-
-
-  @defineChannel ->
-    new Transmitter.Channels.SimpleChannel()
-      .inBackwardDirection()
-      .fromSource @todoListFooterView.clearCompletedClickEvt
-      .fromSource @todoListWithComplete
-      .toTarget @todoList
-      .withTransform (payloads) =>
-        clearCompleted = payloads.get(@todoListFooterView.clearCompletedClickEvt)
-        todoListWithComplete = payloads.get(@todoListWithComplete)
-        if clearCompleted.get?
-          todoListWithComplete
-            .filter ([todo, isCompleted]) -> !isCompleted
-            .map ([todo]) -> todo
-        else
-          clearCompleted
+    new ToggleAllChannel(@todoList, @todoListWithComplete,
+      @todoListView.toggleAllCheckboxVar, @todoListView.toggleAllChangeEvt)
 
 
   @defineChannel ->
     new Transmitter.Channels.SimpleChannel()
       .inForwardDirection()
       .fromSource @todoList
-      .toTarget @todoListFooterView.isVisibleVar
+      .toTarget @todoListView.isVisibleVar
       .withTransform (payload) ->
         Transmitter.Payloads.Variable.setLazy ->
           payload.get().length > 0
 
 
-
-
-class exports.ToggleAllChannel extends Transmitter.Channels.CompositeChannel
-
-  constructor:
-    (@todoList, @todoListWithComplete, @toggleAllCheckboxVar, @toggleAllChangeEvt) ->
-
-  @defineChannel ->
-    new Transmitter.Channels.SimpleChannel()
-      .inForwardDirection()
-      .fromSource @todoListWithComplete
-      .toTarget @toggleAllCheckboxVar
-      .withTransform (todoListWithComplete) ->
-        Transmitter.Payloads.Variable.setLazy( ->
-          todoListWithComplete.get().every ([todo, isCompleted]) -> isCompleted
-        )
-
-
-  @defineLazy 'toggleAllChannelVar', ->
-    new Transmitter.ChannelNodes.ChannelVariable()
-
-
-  @defineChannel ->
-    new Transmitter.Channels.SimpleChannel()
-      .fromSource @todoList
-      .toConnectionTarget @toggleAllChannelVar
-      .withTransform (todoList) =>
-        return null unless todoList?
-        Transmitter.Payloads.Variable.setLazy =>
-          @createToggleAllChannel()
-            .inBackwardDirection()
-            .toTargets todoList.map(({isCompletedVar}) -> isCompletedVar).get()
-
-
-  createToggleAllChannel: ->
-    new Transmitter.Channels.SimpleChannel()
-      .fromSource @toggleAllCheckboxVar
-      .fromSource @toggleAllChangeEvt
-      .withTransform (payloads, isCompleted) =>
-        isCompletedState = payloads.get(@toggleAllCheckboxVar)
-        changed = payloads.get(@toggleAllChangeEvt)
-        payload = if changed.get?
-          isCompletedState.map((state) -> !state)
-        else
-          changed
-
-        for key in isCompleted.keys()
-          isCompleted.set(key, payload)

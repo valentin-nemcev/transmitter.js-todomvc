@@ -10,8 +10,10 @@ window.Transmitter = require 'transmitter'
 {VisibilityToggleVar} = require './helpers'
 {Todo, NonBlankTodoListChannel, TodoListWithCompleteChannel} = require './model'
 {TodoListPersistenceChannel} = require './persistence'
-{TodoListView, TodoListViewChannel, NewTodoView, TodoListFooterView,
-  TodoListFooterViewChannel, ToggleAllChannel} = require './view'
+
+HeaderView = require './views/header'
+MainView   = require './views/main'
+FooterView = require './views/footer'
 
 
 class App extends Transmitter.Nodes.Record
@@ -27,13 +29,6 @@ class App extends Transmitter.Nodes.Record
     new Transmitter.Nodes.List()
 
 
-  @defineLazy 'todoListPersistenceVar', ->
-    new Transmitter.Nodes.PropertyVariable(localStorage, 'todos-transmitter')
-
-  @defineLazy 'todoListPersistenceChannel', ->
-    new TodoListPersistenceChannel(@todoList, @todoListPersistenceVar)
-
-
   @defineLazy 'todoListWithComplete', ->
     new Transmitter.Nodes.List()
 
@@ -41,34 +36,21 @@ class App extends Transmitter.Nodes.Record
     new TodoListWithCompleteChannel(@todoList, @todoListWithComplete)
 
 
-  @defineLazy 'todoListView', ->
-    new TodoListView($('.todo-list'))
+  @defineLazy 'todoListPersistenceVar', ->
+    new Transmitter.Nodes.PropertyVariable(localStorage, 'todos-transmitter')
 
-  @defineLazy 'newTodoView', ->
-    new NewTodoView($('.new-todo'))
+  @defineLazy 'todoListPersistenceChannel', ->
+    new TodoListPersistenceChannel(@todoList, @todoListPersistenceVar)
 
 
-  @defineLazy 'toggleAllCheckboxVar', ->
-    new Transmitter.DOMElement.CheckboxStateVar($('.toggle-all')[0])
+  @defineLazy 'headerView', ->
+    new HeaderView($('.header'))
 
-  @defineLazy 'toggleAllChangeEvt', ->
-    new Transmitter.DOMElement.DOMEvent($('.toggle-all')[0], 'click')
+  @defineLazy 'mainView', ->
+    new MainView($('.main'))
 
-  @defineLazy 'toggleAllIsVisibleVar', ->
-    new VisibilityToggleVar($('.toggle-all'))
-
-  @defineLazy 'toggleAllChannel', ->
-    new ToggleAllChannel(@todoList, @todoListWithComplete,
-      @toggleAllCheckboxVar, @toggleAllChangeEvt)
-
-  @defineLazy 'toggleAllIsVisibleChannel', ->
-    new Transmitter.Channels.SimpleChannel()
-      .inForwardDirection()
-      .fromSource @todoList
-      .toTarget @toggleAllIsVisibleVar
-      .withTransform (payload) ->
-        Transmitter.Payloads.Variable.setLazy ->
-          payload.get().length > 0
+  @defineLazy 'footerView', ->
+    new FooterView($('.footer'))
 
 
   @defineLazy 'locationHash', ->
@@ -90,30 +72,22 @@ class App extends Transmitter.Nodes.Record
           else 'all'
 
 
-  @defineLazy 'todoListFooterView',
-    -> new TodoListFooterView($('.footer'))
-
-  @defineLazy 'todoListViewChannel', ->
-    new TodoListViewChannel(
-      @todoList, @todoListWithComplete, @todoListView, @activeFilter)
-
-  @defineLazy 'todoListFooterViewChannel', ->
-    new TodoListFooterViewChannel(
-      @todoList, @todoListWithComplete, @todoListFooterView, @activeFilter)
-
   init: (tr) ->
     @nonBlankTodoListChannel.init(tr)
-    @todoListPersistenceChannel.init(tr)
-
-    @todoListView.init(tr)
     @todoListWithCompleteChannel.init(tr)
 
-    @todoListViewChannel.init(tr)
-    @todoListFooterViewChannel.init(tr)
-    @toggleAllChannel.init(tr)
-    @toggleAllIsVisibleChannel.init(tr)
-    @newTodoView.init(tr)
-    @newTodoView.createNewTodoChannel().toTarget(@todoList).init(tr)
+    @todoListPersistenceChannel.init(tr)
+
+    @headerView.init(tr)
+    @headerView.createTodoListChannel(@todoList).init(tr)
+
+    @mainView.init(tr)
+    @mainView.createTodoListChannel(
+      @todoList, @todoListWithComplete, @activeFilter).init(tr)
+
+    @footerView.init(tr)
+    @footerView.createTodoListChannel(
+      @todoList, @todoListWithComplete, @activeFilter).init(tr)
 
     @locationHashChannel.init(tr)
     @locationHash.originate(tr)
