@@ -3,7 +3,26 @@
 
 Transmitter = require 'transmitter'
 
-{Todo} = require './model'
+
+module.exports = class TodoStorage extends Transmitter.Nodes.Record
+
+  constructor: (@name) ->
+
+  setDefault: (serializedTodos) ->
+    unless @todoListPersistenceVar.get()
+      @todoListPersistenceVar.set(JSON.stringify(serializedTodos))
+    return this
+
+  load: (tr) ->
+    @todoListPersistenceVar.originate(tr)
+
+
+  @defineLazy 'todoListPersistenceVar', ->
+    new Transmitter.Nodes.PropertyVariable(localStorage, @name)
+
+  createTodosChannel: (todos) ->
+    new TodoListPersistenceChannel(todos, @todoListPersistenceVar)
+
 
 
 class SerializedTodoChannel extends Transmitter.Channels.CompositeChannel
@@ -40,9 +59,9 @@ class SerializedTodoChannel extends Transmitter.Channels.CompositeChannel
         )
 
 
-class exports.TodoListPersistenceChannel extends Transmitter.Channels.CompositeChannel
+class TodoListPersistenceChannel extends Transmitter.Channels.CompositeChannel
 
-  constructor: (@todoList, @todoListPersistenceVar) ->
+  constructor: (@todos, @todoListPersistenceVar) ->
 
 
   @defineLazy 'todoPersistenceChannelVar', ->
@@ -69,7 +88,7 @@ class exports.TodoListPersistenceChannel extends Transmitter.Channels.CompositeC
   serializedId = 0
   @defineChannel ->
     new Transmitter.Channels.ListChannel()
-      .withOrigin @todoList
+      .withOrigin @todos.list
       .withMapOrigin (todo) ->
         serializedVar = new Transmitter.Nodes.Variable()
         serializedVar.todo = todo
@@ -77,8 +96,8 @@ class exports.TodoListPersistenceChannel extends Transmitter.Channels.CompositeC
         serializedVar.inspect = -> "[serializedTodoVar#{id} #{@todo}]"
         return serializedVar
       .withDerived @serializedTodoList
-      .withMapDerived (serializedVar) ->
-        todo = new Todo()
+      .withMapDerived (serializedVar) =>
+        todo = @todos.create()
         serializedVar.todo = todo
         return todo
       .withMatchOriginDerived (todo, serializedTodoVar) ->

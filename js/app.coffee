@@ -7,9 +7,8 @@ $ = require 'jquery'
 window.JQuery = $
 window.Transmitter = require 'transmitter'
 
-{VisibilityToggleVar} = require './helpers'
-{Todo, NonBlankTodoListChannel, TodoListWithCompleteChannel} = require './model'
-{TodoListPersistenceChannel} = require './persistence'
+Todos = require './model'
+TodoStorage = require './storage'
 
 HeaderView = require './views/header'
 MainView   = require './views/main'
@@ -18,29 +17,11 @@ FooterView = require './views/footer'
 
 class App extends Transmitter.Nodes.Record
 
-  @defineLazy 'nonBlankTodoList', ->
-    new Transmitter.Nodes.List()
+  @defineLazy 'todos', ->
+    new Todos()
 
-  @defineLazy 'nonBlankTodoListChannel', ->
-    new NonBlankTodoListChannel(@nonBlankTodoList, @todoList)
-
-
-  @defineLazy 'todoList', ->
-    new Transmitter.Nodes.List()
-
-
-  @defineLazy 'todoListWithComplete', ->
-    new Transmitter.Nodes.List()
-
-  @defineLazy 'todoListWithCompleteChannel', ->
-    new TodoListWithCompleteChannel(@todoList, @todoListWithComplete)
-
-
-  @defineLazy 'todoListPersistenceVar', ->
-    new Transmitter.Nodes.PropertyVariable(localStorage, 'todos-transmitter')
-
-  @defineLazy 'todoListPersistenceChannel', ->
-    new TodoListPersistenceChannel(@todoList, @todoListPersistenceVar)
+  @defineLazy 'todoStorage', ->
+    new TodoStorage('todos-transmitter')
 
 
   @defineLazy 'headerView', ->
@@ -73,37 +54,28 @@ class App extends Transmitter.Nodes.Record
 
 
   init: (tr) ->
-    @nonBlankTodoListChannel.init(tr)
-    @todoListWithCompleteChannel.init(tr)
+    @todos.init(tr)
 
-    @todoListPersistenceChannel.init(tr)
+    @todoStorage.setDefault([
+      {title: 'Todo 1', completed: no},
+      {title: 'Todo 2', completed: yes}
+    ])
+
+    @todoStorage.createTodosChannel(@todos).init(tr)
+    @todoStorage.load(tr)
 
     @headerView.init(tr)
-    @headerView.createTodoListChannel(@todoList).init(tr)
+    @headerView.createTodosChannel(@todos).init(tr)
 
     @mainView.init(tr)
-    @mainView.createTodoListChannel(
-      @todoList, @todoListWithComplete, @activeFilter).init(tr)
+    @mainView.createTodosChannel(@todos, @activeFilter).init(tr)
 
     @footerView.init(tr)
-    @footerView.createTodoListChannel(
-      @todoList, @todoListWithComplete, @activeFilter).init(tr)
+    @footerView.createTodosChannel(@todos, @activeFilter).init(tr)
 
     @locationHashChannel.init(tr)
     @locationHash.originate(tr)
 
-    unless @todoListPersistenceVar.get()
-      @todoListPersistenceVar.set(
-        JSON.stringify([{title: 'Todo 1', completed: no},
-        {title: 'Todo 2', completed: yes}])
-      )
-
-    @todoListPersistenceVar.originate(tr)
-
-    # todo1 = new Todo().init(tr, label: 'Todo 1', isCompleted: no)
-    # todo2 = new Todo().init(tr, label: 'Todo 2', isCompleted: yes)
-
-    # todoList.init(tr, [todo1, todo2])
 
 
 Element::inspect = -> '<' + @tagName + ' ... />'
@@ -116,6 +88,6 @@ Transmitter.Transmission::loggingFilter = (msg) ->
 
 Transmitter.Transmission::loggingIsEnabled = no
 
-app = new App()
+window.app = new App()
 
 Transmitter.startTransmission (tr) -> app.init(tr)

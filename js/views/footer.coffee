@@ -41,9 +41,9 @@ module.exports = class FooterView extends Transmitter.Nodes.Record
           .filter("[href='#/#{filter}']").addClass('selected')
 
 
-  createTodoListChannel: (todoList, todoListWithComplete, activeFilter) ->
+  createTodosChannel: (todos, activeFilter) ->
     new FooterViewChannel(
-      todoList, todoListWithComplete, this, activeFilter)
+      todos.list, todos.withComplete, this, activeFilter)
 
 
 

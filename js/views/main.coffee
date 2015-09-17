@@ -219,8 +219,8 @@ module.exports = class MainView extends Transmitter.Nodes.Record
   @defineLazy 'isVisibleVar', ->
     new VisibilityToggleVar(@$element)
 
-  createTodoListChannel: (todoList, todoListWithComplete, activeFilter) ->
-    new MainViewChannel(todoList, todoListWithComplete, this, activeFilter)
+  createTodosChannel: (todos, activeFilter) ->
+    new MainViewChannel(todos.list, todos.withComplete, this, activeFilter)
 
 
 

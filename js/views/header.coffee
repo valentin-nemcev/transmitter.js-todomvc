@@ -5,8 +5,6 @@ keycode = require 'keycode'
 
 Transmitter = require 'transmitter'
 
-{Todo} = require '../model'
-
 
 module.exports = class HeaderView extends Transmitter.Nodes.Record
 
@@ -27,19 +25,19 @@ module.exports = class HeaderView extends Transmitter.Nodes.Record
     new Transmitter.DOMElement.DOMEvent(@newTodoInputEl, 'keyup')
 
 
-  createTodoListChannel: (todoList) ->
+  createTodosChannel: (todos) ->
     new Transmitter.Channels.SimpleChannel()
       .inBackwardDirection()
       .fromSource @newTodoLabelInputVar
       .fromSource @newTodoKeypressEvt
-      .toTarget todoList
+      .toTarget todos.list
       .withTransform (payloads, tr) =>
         label    = payloads.get(@newTodoLabelInputVar)
         keypress = payloads.get(@newTodoKeypressEvt)
 
         key = keycode(keypress.get?())
         if key is 'enter'
-          todo = new Todo().init(tr, label: label.get())
+          todo = todos.create().init(tr, label: label.get())
           Transmitter.Payloads.List.appendConst(todo)
         else
           Transmitter.Payloads.noop()

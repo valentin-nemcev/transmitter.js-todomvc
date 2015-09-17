@@ -4,7 +4,39 @@
 Transmitter = require 'transmitter'
 
 
-class exports.Todo extends Transmitter.Nodes.Record
+module.exports = class Todos extends Transmitter.Nodes.Record
+
+  init: (tr) ->
+    @nonBlankTodoListChannel.init(tr)
+    @todoListWithCompleteChannel.init(tr)
+    return this
+
+
+  create: ->
+    new Todo()
+
+
+  @defineLazy 'nonBlankTodoList', ->
+    new Transmitter.Nodes.List()
+
+  @defineLazy 'nonBlankTodoListChannel', ->
+    new NonBlankTodoListChannel(@nonBlankTodoList, @list)
+
+
+  @defineLazy 'list', ->
+    new Transmitter.Nodes.List()
+
+
+  @defineLazy 'withComplete', ->
+    new Transmitter.Nodes.List()
+
+  @defineLazy 'todoListWithCompleteChannel', ->
+    new TodoListWithCompleteChannel(@list, @withComplete)
+
+
+
+
+class Todo extends Transmitter.Nodes.Record
 
   inspect: -> "[Todo #{inspect @labelVar.get()}]"
 
@@ -20,7 +52,7 @@ class exports.Todo extends Transmitter.Nodes.Record
 
 
 
-class exports.NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel
+class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel
 
   constructor: (@nonBlankTodoList, @todoList) ->
 
@@ -70,7 +102,7 @@ class exports.NonBlankTodoListChannel extends Transmitter.Channels.CompositeChan
 
 
 
-class exports.TodoListWithCompleteChannel extends Transmitter.Channels.CompositeChannel
+class TodoListWithCompleteChannel extends Transmitter.Channels.CompositeChannel
 
   constructor: (@todoList, @todoListWithComplete) ->
 
