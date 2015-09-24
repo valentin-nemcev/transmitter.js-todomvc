@@ -1,9 +1,9 @@
 'use strict'
 
 
-keycode = require 'keycode'
-
 Transmitter = require 'transmitter'
+
+{getKeycodeMatcher} = require '../helpers'
 
 
 module.exports = class HeaderView extends Transmitter.Nodes.Record
@@ -24,23 +24,19 @@ module.exports = class HeaderView extends Transmitter.Nodes.Record
   @defineLazy 'newTodoKeypressEvt', ->
     new Transmitter.DOMElement.DOMEvent(@newTodoInputEl, 'keyup')
 
+  matchEnter = getKeycodeMatcher 'enter'
+  matchEscEnter = getKeycodeMatcher 'enter', 'esc'
 
   createTodosChannel: (todos) ->
     new Transmitter.Channels.SimpleChannel()
       .inBackwardDirection()
-      .fromSource @newTodoLabelInputVar
-      .fromSource @newTodoKeypressEvt
-      .toTarget todos.list
-      .withTransform (payloads, tr) =>
-        label    = payloads.get(@newTodoLabelInputVar)
-        keypress = payloads.get(@newTodoKeypressEvt)
-
-        key = keycode(keypress.get?())
-        if key is 'enter'
-          todo = todos.create().init(tr, label: label.get())
-          Transmitter.Payloads.List.appendConst(todo)
-        else
-          Transmitter.Payloads.noop()
+      .fromSources @newTodoLabelInputVar, @newTodoKeypressEvt
+      .toTarget todos.todoList
+      .withTransform ([labelPayload, keypressPayload], tr) =>
+        labelPayload
+          .replaceByNoop(matchEnter(keypressPayload))
+          .map (label) -> todos.create().init(tr, {label})
+          .toAppendListElement()
 
 
   @defineLazy 'clearNewTodoLabelInputChannel', ->
@@ -48,9 +44,5 @@ module.exports = class HeaderView extends Transmitter.Nodes.Record
       .inForwardDirection()
       .fromSource @newTodoKeypressEvt
       .toTarget @newTodoLabelInputVar
-      .withTransform (keypress) ->
-        key = keycode(keypress.get?())
-        if key in ['esc', 'enter']
-          Transmitter.Payloads.Variable.setConst('')
-        else
-          Transmitter.Payloads.noop()
+      .withTransform (keypressPayload) ->
+        matchEscEnter(keypressPayload).map -> ''

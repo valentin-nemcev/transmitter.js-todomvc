@@ -1,12 +1,12 @@
 'use strict'
 
 
-keycode = require 'keycode'
+{inspect} = require 'util'
 $ = require 'jquery'
 
 Transmitter = require 'transmitter'
 
-{VisibilityToggleVar, ClassToggleVar} = require '../helpers'
+{getKeycodeMatcher, VisibilityToggleVar, ClassToggleVar} = require '../helpers'
 
 
 class TodoView extends Transmitter.Nodes.Record
@@ -36,27 +36,21 @@ class TodoView extends Transmitter.Nodes.Record
   @defineLazy 'acceptEditEvt', -> new Transmitter.Nodes.RelayNode()
   @defineLazy 'rejectEditEvt', -> new Transmitter.Nodes.RelayNode()
 
+
   @defineLazy 'acceptEditChannel', ->
     new Transmitter.Channels.SimpleChannel()
       .inBackwardDirection()
       .fromSource @inputKeypressEvt
       .toTarget @acceptEditEvt
-      .withTransform (msg) ->
-        if keycode(msg.get?()) is 'enter'
-          Transmitter.Payloads.Variable.setConst(yes)
-        else
-          Transmitter.Payloads.noop()
+      .withTransform getKeycodeMatcher('enter')
+
 
   @defineLazy 'rejectEditChannel', ->
     new Transmitter.Channels.SimpleChannel()
       .inBackwardDirection()
       .fromSource @inputKeypressEvt
       .toTarget @rejectEditEvt
-      .withTransform (msg) ->
-        if keycode(msg.get?()) is 'esc'
-          Transmitter.Payloads.Variable.setConst(yes)
-        else
-          Transmitter.Payloads.noop()
+      .withTransform getKeycodeMatcher('esc')
 
 
   class EditStateChannel extends Transmitter.Channels.CompositeChannel
@@ -68,35 +62,32 @@ class TodoView extends Transmitter.Nodes.Record
         .inBackwardDirection()
         .fromSource @todoView.startEditEvt
         .toTarget @todoView.editStateVar
-        .withTransform (msg) ->
-          if msg.map? then msg.map( -> yes) else msg
+        .withTransform (startEditPayload) ->
+          startEditPayload.map -> yes
 
     @defineChannel ->
       new Transmitter.Channels.SimpleChannel()
         .inBackwardDirection()
         .fromSource @todoView.acceptEditEvt
         .toTarget @todoView.editStateVar
-        .withTransform (msg) ->
-          if msg.map? then msg.map( -> no) else msg
+        .withTransform (acceptEditPayload) ->
+          acceptEditPayload.map -> no
 
     @defineChannel ->
       new Transmitter.Channels.SimpleChannel()
         .inBackwardDirection()
         .fromSource @todoView.rejectEditEvt
         .toTarget @todoView.editStateVar
-        .withTransform (msg) ->
-          if msg.map? then msg.map( -> no) else msg
+        .withTransform (rejectEditPayload) ->
+          rejectEditPayload.map -> no
 
 
   createRemoveTodoChannel: ->
     new Transmitter.Channels.SimpleChannel()
       .inBackwardDirection()
       .fromSource @destroyClickEvt
-      .withTransform (payload) =>
-        if payload.get?
-          Transmitter.Payloads.List.removeConst(@todo)
-        else
-          Transmitter.Payloads.noop()
+      .withTransform (destroyClickPayload) =>
+        destroyClickPayload.map(=> @todo).toRemoveListElement()
 
 
   @defineLazy 'labelVar', ->
@@ -144,32 +135,20 @@ class TodoViewChannel extends Transmitter.Channels.CompositeChannel
   @defineChannel ->
     new Transmitter.Channels.SimpleChannel()
       .inBackwardDirection()
-      .fromSource @todoView.labelInputVar
-      .fromSource @todoView.acceptEditEvt
+      .fromSources @todoView.labelInputVar, @todoView.acceptEditEvt
       .toTarget @todo.labelVar
-      .withTransform (payloads) =>
-        label  = payloads.get(@todoView.labelInputVar)
-        accept = payloads.get(@todoView.acceptEditEvt)
-
-        if accept.get? then label else accept
+      .withTransform ([labelPayload, acceptPayload]) =>
+        labelPayload.replaceByNoop(acceptPayload)
 
 
   @defineChannel ->
     new Transmitter.Channels.SimpleChannel()
       .inForwardDirection()
-      .fromSource @todo.labelVar
-      .fromSource @todoView.startEditEvt
-      .fromSource @todoView.rejectEditEvt
+      .fromSources(
+        @todo.labelVar, @todoView.startEditEvt, @todoView.rejectEditEvt)
       .toTarget @todoView.labelInputVar
-      .withTransform (payloads) =>
-        label  = payloads.get(@todo.labelVar)
-        start  = payloads.get(@todoView.startEditEvt)
-        reject = payloads.get(@todoView.rejectEditEvt)
-
-        if start.get? or reject.get?
-          label
-        else
-          Transmitter.Payloads.noop()
+      .withTransform ([labelPayload, startPayload, rejectPayload]) =>
+        labelPayload.replaceByNoop(startPayload.replaceNoopBy(rejectPayload))
 
 
   @defineChannel ->
@@ -220,7 +199,7 @@ module.exports = class MainView extends Transmitter.Nodes.Record
     new VisibilityToggleVar(@$element)
 
   createTodosChannel: (todos, activeFilter) ->
-    new MainViewChannel(todos.list, todos.withComplete, this, activeFilter)
+    new MainViewChannel(todos.todoList, todos.withComplete, this, activeFilter)
 
 
 
@@ -235,9 +214,8 @@ class ToggleAllChannel extends Transmitter.Channels.CompositeChannel
       .fromSource @todoListWithComplete
       .toTarget @toggleAllCheckboxVar
       .withTransform (todoListWithComplete) ->
-        Transmitter.Payloads.Variable.setLazy( ->
-          todoListWithComplete.get().every ([todo, isCompleted]) -> isCompleted
-        )
+        todoListWithComplete.toSetVariable().map (todos) ->
+          todos.every ([todo, isCompleted]) -> isCompleted
 
 
   @defineLazy 'toggleAllChannelVar', ->
@@ -248,28 +226,23 @@ class ToggleAllChannel extends Transmitter.Channels.CompositeChannel
     new Transmitter.Channels.SimpleChannel()
       .fromSource @todoList
       .toConnectionTarget @toggleAllChannelVar
-      .withTransform (todoList) =>
-        return null unless todoList?
-        Transmitter.Payloads.Variable.setLazy =>
-          @createToggleAllChannel()
-            .inBackwardDirection()
-            .toTargets todoList.map(({isCompletedVar}) -> isCompletedVar).get()
+      .withTransform (todoListPayload) =>
+        return null unless todoListPayload?
+        todoListPayload
+          .map ({isCompletedVar}) -> isCompletedVar
+          .toSetVariable()
+          .map (isCompletedVars) =>
+            @createToggleAllChannel(isCompletedVars).inBackwardDirection()
 
 
-  createToggleAllChannel: ->
+  createToggleAllChannel: (isCompletedVars) ->
     new Transmitter.Channels.SimpleChannel()
-      .fromSource @toggleAllCheckboxVar
-      .fromSource @toggleAllChangeEvt
-      .withTransform (payloads, isCompleted) =>
-        isCompletedState = payloads.get(@toggleAllCheckboxVar)
-        changed = payloads.get(@toggleAllChangeEvt)
-        payload = if changed.get?
-          isCompletedState.map((state) -> !state)
-        else
-          changed
-
-        for key in isCompleted.keys()
-          isCompleted.set(key, payload)
+      .fromSources @toggleAllCheckboxVar, @toggleAllChangeEvt
+      .toDynamicTargets isCompletedVars
+      .withTransform ([isCompletedPayload, changePayload]) =>
+        payload = isCompletedPayload
+          .replaceByNoop(changePayload).map (state) -> !state
+        isCompletedVars.map -> payload
 
 
 
@@ -303,12 +276,9 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel
   @defineChannel ->
     new Transmitter.Channels.SimpleChannel()
       .inForwardDirection()
-      .fromSource @todoListWithComplete
-      .fromSource @activeFilter
+      .fromSources @todoListWithComplete, @activeFilter
       .toTarget @filteredTodoList
-      .withTransform (payloads) =>
-        todoListPayload = payloads.get(@todoListWithComplete)
-        activeFilterPayload = payloads.get(@activeFilter)
+      .withTransform ([todoListPayload, activeFilterPayload]) =>
         filter = activeFilterPayload.get()
         todoListPayload
           .filter ([todo, isCompleted]) ->
@@ -342,8 +312,5 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel
       .inForwardDirection()
       .fromSource @todoList
       .toTarget @todoListView.isVisibleVar
-      .withTransform (payload) ->
-        Transmitter.Payloads.Variable.setLazy ->
-          payload.get().length > 0
-
-
+      .withTransform (todoListPayload) ->
+        todoListPayload.toSetVariable().map (todos) -> todos.length > 0

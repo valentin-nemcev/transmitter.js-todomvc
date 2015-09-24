@@ -83,7 +83,7 @@ $.Event::inspect = -> '[$Ev ' + @type + ' ... ]'
 Event::inspect = -> '[Ev ' + @type + ' ... ]'
 
 Transmitter.Transmission::loggingFilter = (msg) ->
-  msg.match(/activeFilter/)
+  # msg.match(/\btodoList|nonBlankTodoList/)
   # msg.match(/label(Input)?Var|MM/)
 
 Transmitter.Transmission::loggingIsEnabled = no

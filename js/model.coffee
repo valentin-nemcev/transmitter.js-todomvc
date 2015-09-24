@@ -1,6 +1,7 @@
 'use strict'
 
 
+{inspect} = require 'util'
 Transmitter = require 'transmitter'
 
 
@@ -20,10 +21,10 @@ module.exports = class Todos extends Transmitter.Nodes.Record
     new Transmitter.Nodes.List()
 
   @defineLazy 'nonBlankTodoListChannel', ->
-    new NonBlankTodoListChannel(@nonBlankTodoList, @list)
+    new NonBlankTodoListChannel(@nonBlankTodoList, @todoList)
 
 
-  @defineLazy 'list', ->
+  @defineLazy 'todoList', ->
     new Transmitter.Nodes.List()
 
 
@@ -31,8 +32,7 @@ module.exports = class Todos extends Transmitter.Nodes.Record
     new Transmitter.Nodes.List()
 
   @defineLazy 'todoListWithCompleteChannel', ->
-    new TodoListWithCompleteChannel(@list, @withComplete)
-
+    new TodoListWithCompleteChannel(@todoList, @withComplete)
 
 
 
@@ -71,34 +71,22 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel
     new Transmitter.Channels.SimpleChannel()
       .fromSource @todoList
       .toConnectionTarget @nonBlankTodoChannelVar
-      .withTransform (todoList) =>
-        Transmitter.Payloads.Variable.setLazy( =>
-          channel = if todoList?
-            @createNonBlankTodoChannel(todoList.get())
-          else
-            new Transmitter.Channels.PlaceholderChannel()
-          channel
+      .withTransform (todoListPayload) =>
+        todoListPayload.toSetVariable().map (todoList) =>
+          @createNonBlankTodoChannel(todoList)
             .inBackwardDirection()
             .toTarget(@nonBlankTodoList)
-        )
 
 
   nonBlank = (str) -> !!str.trim()
 
 
   createNonBlankTodoChannel: (todos) ->
-    if todos.length
-      channel = new Transmitter.Channels.SimpleChannel()
-      channel.fromSources(todo.labelVar for todo in todos)
-      channel.withTransform (labels) ->
-        Transmitter.Payloads.List.setLazy ->
-          nonBlankTodos =
-            todos[i] for label, i in labels.values() when nonBlank(label.get())
-          return nonBlankTodos
-    else
-      new Transmitter.Channels.ConstChannel()
-        .withPayload ->
-          Transmitter.Payloads.List.setConst([])
+    new Transmitter.Channels.SimpleChannel()
+      .fromDynamicSources(todo.labelVar for todo in todos)
+      .withTransform (labelPayloads) ->
+        labelPayloads.merge().map (labels) ->
+          todos[i] for label, i in labels when nonBlank(label)
 
 
 
@@ -116,35 +104,24 @@ class TodoListWithCompleteChannel extends Transmitter.Channels.CompositeChannel
       .inBackwardDirection()
       .fromSource @todoListWithComplete
       .toTarget @todoList
-      .withTransform (todoListWithComplete) =>
-        todoListWithComplete.map ([todo]) -> todo
+      .withTransform (todoListWithCompletePayload) =>
+        todoListWithCompletePayload.map ([todo]) -> todo
 
 
   @defineChannel ->
     new Transmitter.Channels.SimpleChannel()
       .fromSource @todoList
       .toConnectionTarget @withCompleteChannelVar
-      .withTransform (todoList) =>
-        Transmitter.Payloads.Variable.setLazy( =>
-          channel = if todoList?
-            @createWithCompleteChannel(todoList.get())
-          else
-            new Transmitter.Channels.PlaceholderChannel()
-          channel
+      .withTransform (todoListPayload) =>
+        todoListPayload.toSetVariable().map (todoList) =>
+          @createWithCompleteChannel(todoList)
             .inForwardDirection()
             .toTarget(@todoListWithComplete)
-        )
 
 
   createWithCompleteChannel: (todos) ->
-    if todos.length
-      channel = new Transmitter.Channels.SimpleChannel()
-      channel.fromSources(todo.isCompletedVar for todo in todos)
-      channel.withTransform (isCompletedList) ->
-        Transmitter.Payloads.List.setLazy ->
-          for isCompleted, i in isCompletedList.values()
-            [todos[i], isCompleted.get()]
-    else
-      new Transmitter.Channels.ConstChannel()
-        .withPayload ->
-          Transmitter.Payloads.List.setConst([])
+    new Transmitter.Channels.SimpleChannel()
+      .fromDynamicSources(todo.isCompletedVar for todo in todos)
+      .withTransform (isCompletedPayloads) ->
+        isCompletedPayloads.merge().map (isCompletedStates) ->
+          [todos[i], isCompleted] for isCompleted, i in isCompletedStates

@@ -1,7 +1,15 @@
 'use strict'
 
 
+keycode = require 'keycode'
+
 Transmitter = require 'transmitter'
+
+exports.getKeycodeMatcher = (keys...) ->
+  (keypressPayload) ->
+      keypressPayload
+        .map (evt) -> keycode(evt) in keys
+        .noopIf (isKey) -> !isKey
 
 
 class exports.VisibilityToggleVar extends Transmitter.Nodes.Variable

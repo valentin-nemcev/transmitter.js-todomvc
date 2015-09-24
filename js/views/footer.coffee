@@ -43,7 +43,7 @@ module.exports = class FooterView extends Transmitter.Nodes.Record
 
   createTodosChannel: (todos, activeFilter) ->
     new FooterViewChannel(
-      todos.list, todos.withComplete, this, activeFilter)
+      todos.todoList, todos.withComplete, this, activeFilter)
 
 
 
@@ -65,14 +65,12 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel
       .inForwardDirection()
       .fromSource @todoListWithComplete
       .toTarget @todoListFooterView.completeCountVar
-      .withTransform (todoListWithComplete) ->
-        Transmitter.Payloads.Variable.setLazy(->
-          count = todoListWithComplete.get()
-            .filter(([todo, isCompleted]) -> !isCompleted)
-            .length
-          items = if count is 1 then 'item' else 'items'
-          "#{count} #{items} left"
-        )
+      .withTransform (todoListWithCompletePayload) ->
+        todoListWithCompletePayload
+          .filter(([todo, isCompleted]) -> !isCompleted)
+          .toSetVariable()
+          .map ({length}) ->
+            [length, if length is 1 then 'item' else 'items'].join(' ')
 
 
   @defineChannel ->
@@ -80,30 +78,24 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel
       .inForwardDirection()
       .fromSource @todoListWithComplete
       .toTarget @todoListFooterView.clearCompletedIsVisibleVar
-      .withTransform (todoListWithComplete) ->
-        Transmitter.Payloads.Variable.setLazy(->
-          count = todoListWithComplete.get()
-            .filter(([todo, isCompleted]) -> isCompleted)
-            .length
-          count > 0
-        )
+      .withTransform (todoListWithCompletePayload) ->
+        todoListWithCompletePayload
+          .filter(([todo, isCompleted]) -> isCompleted)
+          .toSetVariable()
+          .map ({length}) -> length > 0
 
 
   @defineChannel ->
     new Transmitter.Channels.SimpleChannel()
       .inBackwardDirection()
-      .fromSource @todoListFooterView.clearCompletedClickEvt
-      .fromSource @todoListWithComplete
+      .fromSources(
+        @todoListFooterView.clearCompletedClickEvt, @todoListWithComplete)
       .toTarget @todoList
-      .withTransform (payloads) =>
-        clearCompleted = payloads.get(@todoListFooterView.clearCompletedClickEvt)
-        todoListWithComplete = payloads.get(@todoListWithComplete)
-        if clearCompleted.get?
-          todoListWithComplete
-            .filter ([todo, isCompleted]) -> !isCompleted
-            .map ([todo]) -> todo
-        else
-          clearCompleted
+      .withTransform ([clearCompletedPayload, todoListWithCompletePayload]) =>
+        todoListWithCompletePayload
+          .replaceByNoop(clearCompletedPayload)
+          .filter ([todo, isCompleted]) -> !isCompleted
+          .map ([todo]) -> todo
 
 
   @defineChannel ->
@@ -111,6 +103,5 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel
       .inForwardDirection()
       .fromSource @todoList
       .toTarget @todoListFooterView.isVisibleVar
-      .withTransform (payload) ->
-        Transmitter.Payloads.Variable.setLazy ->
-          payload.get().length > 0
+      .withTransform (todoListPayload) ->
+        todoListPayload.toSetVariable().map ({length}) -> length > 0
