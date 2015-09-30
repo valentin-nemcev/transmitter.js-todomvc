@@ -17,40 +17,27 @@ FooterView = require './views/footer'
 
 class App extends Transmitter.Nodes.Record
 
-  @defineLazy 'todos', ->
-    new Todos()
+  constructor: ->
+    @todos = new Todos()
+    @todoStorage = new TodoStorage('todos-transmitter')
 
-  @defineLazy 'todoStorage', ->
-    new TodoStorage('todos-transmitter')
+    @headerView = new HeaderView($('.header'))
+    @mainView = new MainView($('.main'))
+    @footerView = new FooterView($('.footer'))
 
-
-  @defineLazy 'headerView', ->
-    new HeaderView($('.header'))
-
-  @defineLazy 'mainView', ->
-    new MainView($('.main'))
-
-  @defineLazy 'footerView', ->
-    new FooterView($('.footer'))
-
-
-  @defineLazy 'locationHash', ->
-    new Transmitter.Browser.LocationHash()
-
-  @defineLazy 'activeFilter', ->
-    new Transmitter.Nodes.Variable()
-
-  @defineLazy 'locationHashChannel', ->
-    new Transmitter.Channels.SimpleChannel()
-    .inBackwardDirection()
-    .fromSource @locationHash
-    .toTarget @activeFilter
-    .withTransform (locationHashPayload) ->
-      locationHashPayload.map (value) ->
-        switch value
-          when '#/active' then 'active'
-          when '#/completed' then 'completed'
-          else 'all'
+    @locationHash = new Transmitter.Browser.LocationHash()
+    @activeFilter = new Transmitter.Nodes.Variable()
+    @locationHashChannel =
+      new Transmitter.Channels.SimpleChannel()
+      .inBackwardDirection()
+      .fromSource @locationHash
+      .toTarget @activeFilter
+      .withTransform (locationHashPayload) ->
+        locationHashPayload.map (value) ->
+          switch value
+            when '#/active' then 'active'
+            when '#/completed' then 'completed'
+            else 'all'
 
 
   init: (tr) ->
