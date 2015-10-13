@@ -9,12 +9,12 @@ module.exports = class Todos extends Transmitter.Nodes.Record
 
   constructor: ->
     @todoList = new Transmitter.Nodes.List()
+
     @nonBlankTodoList = new Transmitter.Nodes.List()
     @nonBlankTodoListChannel =
       new NonBlankTodoListChannel(@nonBlankTodoList, @todoList)
 
     @withComplete = new Transmitter.Nodes.List()
-
     @todoListWithCompleteChannel =
       new TodoListWithCompleteChannel(@todoList, @withComplete)
 
@@ -80,7 +80,7 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel
     new Transmitter.Channels.SimpleChannel()
       .fromDynamicSources(todo.labelVar for todo in todos)
       .withTransform (labelPayloads) ->
-        labelPayloads.merge().map (labels) ->
+        Transmitter.Payloads.Variable.merge(labelPayloads).map (labels) ->
           todos[i] for label, i in labels when nonBlank(label)
 
 
@@ -88,9 +88,6 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel
 class TodoListWithCompleteChannel extends Transmitter.Channels.CompositeChannel
 
   constructor: (@todoList, @todoListWithComplete) ->
-    @withCompleteChannelVar =
-      new Transmitter.ChannelNodes.ChannelVariable()
-
     @addChannel(
       new Transmitter.Channels.SimpleChannel()
         .inBackwardDirection()
@@ -100,21 +97,29 @@ class TodoListWithCompleteChannel extends Transmitter.Channels.CompositeChannel
           todoListWithCompletePayload.map ([todo]) -> todo
     )
 
+    @isCompletedList = new Transmitter.Nodes.List()
+    @isCompletedDynamicChannelVar =
+      new Transmitter.ChannelNodes.DynamicChannelVariable('sources', =>
+        new Transmitter.Channels.SimpleChannel()
+          .inForwardDirection()
+          .toTarget(@isCompletedList)
+          .withTransform (isCompletedPayload) ->
+            isCompletedPayload.flatten()
+      )
+
     @addChannel(
       new Transmitter.Channels.SimpleChannel()
         .fromSource @todoList
-        .toConnectionTarget @withCompleteChannelVar
+        .toConnectionTarget @isCompletedDynamicChannelVar
         .withTransform (todoListPayload) =>
-          todoListPayload.toSetVariable().map (todoList) =>
-            @createWithCompleteChannel(todoList)
-              .inForwardDirection()
-              .toTarget(@todoListWithComplete)
+          todoListPayload.map (todo) -> todo.isCompletedVar
     )
 
-
-  createWithCompleteChannel: (todos) ->
-    new Transmitter.Channels.SimpleChannel()
-      .fromDynamicSources(todo.isCompletedVar for todo in todos)
-      .withTransform (isCompletedPayloads) ->
-        isCompletedPayloads.merge().map (isCompletedStates) ->
-          [todos[i], isCompleted] for isCompleted, i in isCompletedStates
+    @addChannel(
+      new Transmitter.Channels.SimpleChannel()
+        .inForwardDirection()
+        .fromSources @todoList, @isCompletedList
+        .toTarget @todoListWithComplete
+        .withTransform ([todosPayload, isCompletedPayload]) =>
+          todosPayload.zip(isCompletedPayload)
+    )

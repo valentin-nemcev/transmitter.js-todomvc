@@ -205,8 +205,6 @@ module.exports = class MainView extends Transmitter.Nodes.Record
 class ToggleAllChannel extends Transmitter.Channels.CompositeChannel
 
   constructor: (@todoList, @todoListWithComplete, @toggleAllCheckboxVar, @toggleAllChangeEvt) ->
-    @toggleAllChannelVar = new Transmitter.ChannelNodes.ChannelVariable()
-
     @addChannel(
       new Transmitter.Channels.SimpleChannel()
         .inForwardDirection()
@@ -217,27 +215,27 @@ class ToggleAllChannel extends Transmitter.Channels.CompositeChannel
             todos.every ([todo, isCompleted]) -> isCompleted
     )
 
+    @toggleAllDynamicChannelVar =
+      new Transmitter.ChannelNodes.DynamicChannelVariable('targets', =>
+        new Transmitter.Channels.SimpleChannel()
+          .inBackwardDirection()
+          .fromSources @toggleAllCheckboxVar, @toggleAllChangeEvt
+          .withTransform \
+            ([isCompletedPayload, changePayload], isCompletedListPayload) =>
+              payload = isCompletedPayload
+                .replaceByNoop(changePayload).map (state) -> !state
+              isCompletedListPayload.map(-> payload)
+      )
+
     @addChannel(
       new Transmitter.Channels.SimpleChannel()
         .fromSource @todoList
-        .toConnectionTarget @toggleAllChannelVar
+        .toConnectionTarget @toggleAllDynamicChannelVar
         .withTransform (todoListPayload) =>
           return null unless todoListPayload?
           todoListPayload
             .map ({isCompletedVar}) -> isCompletedVar
-            .toSetVariable()
-            .map (isCompletedVars) =>
-              @createToggleAllChannel(isCompletedVars).inBackwardDirection()
     )
-
-  createToggleAllChannel: (isCompletedVars) ->
-    new Transmitter.Channels.SimpleChannel()
-      .fromSources @toggleAllCheckboxVar, @toggleAllChangeEvt
-      .toDynamicTargets isCompletedVars
-      .withTransform ([isCompletedPayload, changePayload]) =>
-        payload = isCompletedPayload
-          .replaceByNoop(changePayload).map (state) -> !state
-        isCompletedVars.map -> payload
 
 
 

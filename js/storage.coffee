@@ -56,9 +56,6 @@ class TodoListPersistenceChannel extends Transmitter.Channels.CompositeChannel
   serializedId = 0
 
   constructor: (@todos, @todoListPersistenceVar) ->
-    @todoPersistenceChannelVar =
-      new Transmitter.ChannelNodes.ChannelVariable()
-
     @serializedTodoList = new Transmitter.Nodes.List()
     @serializedTodosVar = new Transmitter.Nodes.Variable()
 
@@ -105,32 +102,27 @@ class TodoListPersistenceChannel extends Transmitter.Channels.CompositeChannel
             return v
     )
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .fromSource @serializedTodoList
-        .toConnectionTarget @todoPersistenceChannelVar
-        .withTransform (serializedTodoListPayload) =>
-          serializedTodoListPayload.toSetVariable().map (v) =>
-            @createTodoPersistenceChannel(v)
-    )
+    @todoPersistenceForwardChannelVar =
+      new Transmitter.ChannelNodes.DynamicChannelVariable('sources', =>
+        new Transmitter.Channels.SimpleChannel()
+          .inForwardDirection()
+          .toTarget @serializedTodosVar
+          .withTransform (serializedTodosPayloads) ->
+            serializedTodosPayloads.flatten()
+      )
 
-
-  createTodoPersistenceChannel: (serializedTodoVars) ->
-    new Transmitter.Channels.CompositeChannel()
-      .addChannel(
+    @todoPersistenceBackwardChannelVar =
+      new Transmitter.ChannelNodes.DynamicChannelVariable('targets', =>
         new Transmitter.Channels.SimpleChannel()
           .inBackwardDirection()
           .fromSource @serializedTodosVar
-          .toDynamicTargets(serializedTodoVars)
           .withTransform (serializedTodosPayload) ->
-            serializedTodosPayload
-              .map (todos) -> if todos?.length? then todos else []
-              .separate()
-      ).addChannel(
-        new Transmitter.Channels.SimpleChannel()
-          .inForwardDirection()
-          .fromDynamicSources(serializedTodoVars)
-          .toTarget @serializedTodosVar
-          .withTransform (serializedTodosPayloads) ->
-            serializedTodosPayloads.merge()
+            serializedTodosPayload.toSetList().unflatten()
       )
+
+    @addChannel(
+      new Transmitter.Channels.SimpleChannel()
+        .fromSource @serializedTodoList
+        .toConnectionTargets \
+          @todoPersistenceBackwardChannelVar, @todoPersistenceForwardChannelVar
+    )
