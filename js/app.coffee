@@ -15,7 +15,7 @@ MainView   = require './views/main'
 FooterView = require './views/footer'
 
 
-class App extends Transmitter.Nodes.Record
+class App
 
   constructor: ->
     @todos = new Todos()

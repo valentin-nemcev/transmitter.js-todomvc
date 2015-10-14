@@ -6,18 +6,19 @@ Transmitter = require 'transmitter'
 {VisibilityToggleVar} = require '../helpers'
 
 
-module.exports = class FooterView extends Transmitter.Nodes.Record
+module.exports = class FooterView
 
   constructor: (@$element) ->
+
+    @$clearCompleted = @$element.find('.clear-completed')
     @completeCountVar =
       new Transmitter.DOMElement.TextVar(@$element.find('.todo-count')[0])
 
     @clearCompletedIsVisibleVar =
-      new VisibilityToggleVar(@$element.find('.clear-completed'))
+      new VisibilityToggleVar(@$clearCompleted)
 
     @clearCompletedClickEvt =
-      new Transmitter.DOMElement
-        .DOMEvent(@$element.find('.clear-completed')[0], 'click')
+      new Transmitter.DOMElement.DOMEvent(@$clearCompleted[0], 'click')
 
     @isVisibleVar = new VisibilityToggleVar(@$element)
 
@@ -46,56 +47,46 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel
 
   constructor: (@todoList, @todoListWithComplete, @todoListFooterView, @activeFilter) ->
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inForwardDirection()
-        .fromSource @activeFilter
-        .toTarget @todoListFooterView.activeFilter
-    )
+    @defineSimpleChannel()
+      .inForwardDirection()
+      .fromSource @activeFilter
+      .toTarget @todoListFooterView.activeFilter
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inForwardDirection()
-        .fromSource @todoListWithComplete
-        .toTarget @todoListFooterView.completeCountVar
-        .withTransform (todoListWithCompletePayload) ->
-          todoListWithCompletePayload
-            .filter(([todo, isCompleted]) -> !isCompleted)
-            .toSetVariable()
-            .map ({length}) ->
-              [length, if length is 1 then 'item' else 'items'].join(' ')
-    )
+    @defineSimpleChannel()
+      .inForwardDirection()
+      .fromSource @todoListWithComplete
+      .toTarget @todoListFooterView.completeCountVar
+      .withTransform (todoListWithCompletePayload) ->
+        todoListWithCompletePayload
+          .filter(([todo, isCompleted]) -> !isCompleted)
+          .toSetVariable()
+          .map ({length}) ->
+            [length, if length is 1 then 'item' else 'items'].join(' ')
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inForwardDirection()
-        .fromSource @todoListWithComplete
-        .toTarget @todoListFooterView.clearCompletedIsVisibleVar
-        .withTransform (todoListWithCompletePayload) ->
-          todoListWithCompletePayload
-            .filter(([todo, isCompleted]) -> isCompleted)
-            .toSetVariable()
-            .map ({length}) -> length > 0
-    )
+    @defineSimpleChannel()
+      .inForwardDirection()
+      .fromSource @todoListWithComplete
+      .toTarget @todoListFooterView.clearCompletedIsVisibleVar
+      .withTransform (todoListWithCompletePayload) ->
+        todoListWithCompletePayload
+          .filter(([todo, isCompleted]) -> isCompleted)
+          .toSetVariable()
+          .map ({length}) -> length > 0
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inBackwardDirection()
-        .fromSources(
-          @todoListFooterView.clearCompletedClickEvt, @todoListWithComplete)
-        .toTarget @todoList
-        .withTransform ([clearCompletedPayload, todoListWithCompletePayload]) =>
-          todoListWithCompletePayload
-            .replaceByNoop(clearCompletedPayload)
-            .filter ([todo, isCompleted]) -> !isCompleted
-            .map ([todo]) -> todo
-    )
+    @defineSimpleChannel()
+      .inBackwardDirection()
+      .fromSources(
+        @todoListFooterView.clearCompletedClickEvt, @todoListWithComplete)
+      .toTarget @todoList
+      .withTransform ([clearCompletedPayload, todoListWithCompletePayload]) =>
+        todoListWithCompletePayload
+          .replaceByNoop(clearCompletedPayload)
+          .filter ([todo, isCompleted]) -> !isCompleted
+          .map ([todo]) -> todo
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inForwardDirection()
-        .fromSource @todoList
-        .toTarget @todoListFooterView.isVisibleVar
-        .withTransform (todoListPayload) ->
-          todoListPayload.toSetVariable().map ({length}) -> length > 0
-    )
+    @defineSimpleChannel()
+      .inForwardDirection()
+      .fromSource @todoList
+      .toTarget @todoListFooterView.isVisibleVar
+      .withTransform (todoListPayload) ->
+        todoListPayload.toSetVariable().map ({length}) -> length > 0

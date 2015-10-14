@@ -6,16 +6,16 @@ Transmitter = require 'transmitter'
 {getKeycodeMatcher} = require '../helpers'
 
 
-module.exports = class HeaderView extends Transmitter.Nodes.Record
+module.exports = class HeaderView
 
   constructor: (@$element) ->
-    @newTodoInputEl = @$element.find('.new-todo')[0]
+    @$newTodoInput = @$element.find('.new-todo')
 
     @newTodoLabelInputVar =
-      new Transmitter.DOMElement.InputValueVar(@newTodoInputEl)
+      new Transmitter.DOMElement.InputValueVar(@$newTodoInput[0])
 
     @newTodoKeypressEvt =
-      new Transmitter.DOMElement.DOMEvent(@newTodoInputEl, 'keyup')
+      new Transmitter.DOMElement.DOMEvent(@$newTodoInput[0], 'keyup')
 
     @clearNewTodoLabelInputChannel =
       new Transmitter.Channels.SimpleChannel()

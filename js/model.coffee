@@ -5,7 +5,7 @@
 Transmitter = require 'transmitter'
 
 
-module.exports = class Todos extends Transmitter.Nodes.Record
+module.exports = class Todos
 
   constructor: ->
     @todoList = new Transmitter.Nodes.List()
@@ -30,7 +30,7 @@ module.exports = class Todos extends Transmitter.Nodes.Record
 
 
 
-class Todo extends Transmitter.Nodes.Record
+class Todo
 
   inspect: -> "[Todo #{inspect @labelVar.get()}]"
 
@@ -54,23 +54,19 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel
     @nonBlankTodoChannelVar =
       new Transmitter.ChannelNodes.ChannelVariable()
 
-    @addChannel(
-      new Transmitter.Channels.ListChannel()
-        .inForwardDirection()
-        .withOrigin @nonBlankTodoList
-        .withDerived @todoList
-    )
+    @defineListChannel()
+      .inForwardDirection()
+      .withOrigin @nonBlankTodoList
+      .withDerived @todoList
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .fromSource @todoList
-        .toConnectionTarget @nonBlankTodoChannelVar
-        .withTransform (todoListPayload) =>
-          todoListPayload.toSetVariable().map (todoList) =>
-            @createNonBlankTodoChannel(todoList)
-              .inBackwardDirection()
-              .toTarget(@nonBlankTodoList)
-    )
+    @defineSimpleChannel()
+      .fromSource @todoList
+      .toConnectionTarget @nonBlankTodoChannelVar
+      .withTransform (todoListPayload) =>
+        todoListPayload.toSetVariable().map (todoList) =>
+          @createNonBlankTodoChannel(todoList)
+            .inBackwardDirection()
+            .toTarget(@nonBlankTodoList)
 
 
   nonBlank = (str) -> !!str.trim()
@@ -88,14 +84,12 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel
 class TodoListWithCompleteChannel extends Transmitter.Channels.CompositeChannel
 
   constructor: (@todoList, @todoListWithComplete) ->
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inBackwardDirection()
-        .fromSource @todoListWithComplete
-        .toTarget @todoList
-        .withTransform (todoListWithCompletePayload) =>
-          todoListWithCompletePayload.map ([todo]) -> todo
-    )
+    @defineSimpleChannel()
+      .inBackwardDirection()
+      .fromSource @todoListWithComplete
+      .toTarget @todoList
+      .withTransform (todoListWithCompletePayload) =>
+        todoListWithCompletePayload.map ([todo]) -> todo
 
     @isCompletedList = new Transmitter.Nodes.List()
     @isCompletedDynamicChannelVar =
@@ -107,19 +101,15 @@ class TodoListWithCompleteChannel extends Transmitter.Channels.CompositeChannel
             isCompletedPayload.flatten()
       )
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .fromSource @todoList
-        .toConnectionTarget @isCompletedDynamicChannelVar
-        .withTransform (todoListPayload) =>
-          todoListPayload.map (todo) -> todo.isCompletedVar
-    )
+    @defineSimpleChannel()
+      .fromSource @todoList
+      .toConnectionTarget @isCompletedDynamicChannelVar
+      .withTransform (todoListPayload) =>
+        todoListPayload.map (todo) -> todo.isCompletedVar
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inForwardDirection()
-        .fromSources @todoList, @isCompletedList
-        .toTarget @todoListWithComplete
-        .withTransform ([todosPayload, isCompletedPayload]) =>
-          todosPayload.zip(isCompletedPayload)
-    )
+    @defineSimpleChannel()
+      .inForwardDirection()
+      .fromSources @todoList, @isCompletedList
+      .toTarget @todoListWithComplete
+      .withTransform ([todosPayload, isCompletedPayload]) =>
+        todosPayload.zip(isCompletedPayload)

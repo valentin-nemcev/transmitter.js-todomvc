@@ -12,66 +12,59 @@ Transmitter = require 'transmitter'
 class EditStateChannel extends Transmitter.Channels.CompositeChannel
 
   constructor: (@todoView) ->
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inBackwardDirection()
-        .fromSource @todoView.startEditEvt
-        .toTarget @todoView.editStateVar
-        .withTransform (startEditPayload) ->
-          startEditPayload.map -> yes
-    )
+    @defineSimpleChannel()
+      .inBackwardDirection()
+      .fromSource @todoView.startEditEvt
+      .toTarget @todoView.editStateVar
+      .withTransform (startEditPayload) ->
+        startEditPayload.map -> yes
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inBackwardDirection()
-        .fromSource @todoView.acceptEditEvt
-        .toTarget @todoView.editStateVar
-        .withTransform (acceptEditPayload) ->
-          acceptEditPayload.map -> no
-    )
+    @defineSimpleChannel()
+      .inBackwardDirection()
+      .fromSource @todoView.acceptEditEvt
+      .toTarget @todoView.editStateVar
+      .withTransform (acceptEditPayload) ->
+        acceptEditPayload.map -> no
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inBackwardDirection()
-        .fromSource @todoView.rejectEditEvt
-        .toTarget @todoView.editStateVar
-        .withTransform (rejectEditPayload) ->
-          rejectEditPayload.map -> no
-    )
+    @defineSimpleChannel()
+      .inBackwardDirection()
+      .fromSource @todoView.rejectEditEvt
+      .toTarget @todoView.editStateVar
+      .withTransform (rejectEditPayload) ->
+        rejectEditPayload.map -> no
 
 
-class TodoView extends Transmitter.Nodes.Record
+class TodoView
 
   inspect: -> "[TodoView #{inspect @todo.labelVar.get()}]"
 
   constructor: (@todo) ->
     @$element = $('<li/>').append(
       $('<div/>', class: 'view').append(
-        $('<input/>', class: 'toggle', type: 'checkbox')
-        $('<label/>')
-        $('<button/>', class: 'destroy')
+        @$checkbox = $('<input/>', class: 'toggle', type: 'checkbox'),
+        @$label = $('<label/>'),
+        @$destroy = $('<button/>', class: 'destroy')
       )
-      $('<input/>', class: 'edit')
+      @$edit = $('<input/>', class: 'edit')
     )
 
     @labelVar =
-      new Transmitter.DOMElement.TextVar(@$element.find('label')[0])
+      new Transmitter.DOMElement.TextVar(@$label[0])
 
     @labelInputVar =
-      new Transmitter.DOMElement.InputValueVar(@$element.find('.edit')[0])
+      new Transmitter.DOMElement.InputValueVar(@$edit[0])
 
-    checkbox = @$element.find('.toggle')[0]
     @isCompletedInputVar =
-      new Transmitter.DOMElement.CheckboxStateVar(checkbox)
+      new Transmitter.DOMElement.CheckboxStateVar(@$checkbox[0])
 
     @labelDblclickEvt =
-      new Transmitter.DOMElement.DOMEvent(@$element.find('label')[0], 'dblclick')
+      new Transmitter.DOMElement.DOMEvent(@$label[0], 'dblclick')
 
     @inputKeypressEvt =
-      new Transmitter.DOMElement.DOMEvent(@$element.find('.edit')[0], 'keyup')
+      new Transmitter.DOMElement.DOMEvent(@$edit[0], 'keyup')
 
     @destroyClickEvt =
-      new Transmitter.DOMElement.DOMEvent(@$element.find('.destroy')[0], 'click')
+      new Transmitter.DOMElement.DOMEvent(@$destroy[0], 'click')
 
     @isCompletedClassVar =
       new ClassToggleVar(@$element, 'completed')
@@ -124,47 +117,37 @@ class TodoViewChannel extends Transmitter.Channels.CompositeChannel
 
 
   constructor: (@todo, @todoView) ->
-    @addChannel(
-      new Transmitter.Channels.VariableChannel()
-        .withOrigin @todo.labelVar
-        .withDerived @todoView.labelVar
-    )
+    @defineVariableChannel()
+      .withOrigin @todo.labelVar
+      .withDerived @todoView.labelVar
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inBackwardDirection()
-        .fromSources @todoView.labelInputVar, @todoView.acceptEditEvt
-        .toTarget @todo.labelVar
-        .withTransform ([labelPayload, acceptPayload]) =>
-          labelPayload.replaceByNoop(acceptPayload)
-    )
+    @defineSimpleChannel()
+      .inBackwardDirection()
+      .fromSources @todoView.labelInputVar, @todoView.acceptEditEvt
+      .toTarget @todo.labelVar
+      .withTransform ([labelPayload, acceptPayload]) =>
+        labelPayload.replaceByNoop(acceptPayload)
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inForwardDirection()
-        .fromSources(
-          @todo.labelVar, @todoView.startEditEvt, @todoView.rejectEditEvt)
-        .toTarget @todoView.labelInputVar
-        .withTransform ([labelPayload, startPayload, rejectPayload]) =>
-          labelPayload.replaceByNoop(startPayload.replaceNoopBy(rejectPayload))
-    )
+    @defineSimpleChannel()
+      .inForwardDirection()
+      .fromSources(
+        @todo.labelVar, @todoView.startEditEvt, @todoView.rejectEditEvt)
+      .toTarget @todoView.labelInputVar
+      .withTransform ([labelPayload, startPayload, rejectPayload]) =>
+        labelPayload.replaceByNoop(startPayload.replaceNoopBy(rejectPayload))
 
-    @addChannel(
-      new Transmitter.Channels.VariableChannel()
-        .withOrigin @todo.isCompletedVar
-        .withDerived @todoView.isCompletedInputVar
-    )
+    @defineVariableChannel()
+      .withOrigin @todo.isCompletedVar
+      .withDerived @todoView.isCompletedInputVar
 
-    @addChannel(
-      new Transmitter.Channels.VariableChannel()
-        .inForwardDirection()
-        .withOrigin @todo.isCompletedVar
-        .withDerived @todoView.isCompletedClassVar
-    )
+    @defineVariableChannel()
+      .inForwardDirection()
+      .withOrigin @todo.isCompletedVar
+      .withDerived @todoView.isCompletedClassVar
 
 
 
-module.exports = class MainView extends Transmitter.Nodes.Record
+module.exports = class MainView
 
   constructor: (@$element) ->
 
@@ -183,11 +166,12 @@ module.exports = class MainView extends Transmitter.Nodes.Record
             (view, element) -> view.$element[0] == element
           )
 
+    @$toggleAll = @$element.find('.toggle-all')
     @toggleAllCheckboxVar =
-      new Transmitter.DOMElement.CheckboxStateVar(@$element.find('.toggle-all')[0])
+      new Transmitter.DOMElement.CheckboxStateVar(@$toggleAll[0])
 
     @toggleAllChangeEvt =
-      new Transmitter.DOMElement.DOMEvent(@$element.find('.toggle-all')[0], 'click')
+      new Transmitter.DOMElement.DOMEvent(@$toggleAll[0], 'click')
 
     @isVisibleVar =
       new VisibilityToggleVar(@$element)
@@ -204,16 +188,16 @@ module.exports = class MainView extends Transmitter.Nodes.Record
 
 class ToggleAllChannel extends Transmitter.Channels.CompositeChannel
 
-  constructor: (@todoList, @todoListWithComplete, @toggleAllCheckboxVar, @toggleAllChangeEvt) ->
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inForwardDirection()
-        .fromSource @todoListWithComplete
-        .toTarget @toggleAllCheckboxVar
-        .withTransform (todoListWithComplete) ->
-          todoListWithComplete.toSetVariable().map (todos) ->
-            todos.every ([todo, isCompleted]) -> isCompleted
-    )
+  constructor: (@todoList, @todoListWithComplete,
+      @toggleAllCheckboxVar, @toggleAllChangeEvt) ->
+
+    @defineSimpleChannel()
+      .inForwardDirection()
+      .fromSource @todoListWithComplete
+      .toTarget @toggleAllCheckboxVar
+      .withTransform (todoListWithComplete) ->
+        todoListWithComplete.toSetVariable().map (todos) ->
+          todos.every ([todo, isCompleted]) -> isCompleted
 
     @toggleAllDynamicChannelVar =
       new Transmitter.ChannelNodes.DynamicChannelVariable('targets', =>
@@ -227,15 +211,13 @@ class ToggleAllChannel extends Transmitter.Channels.CompositeChannel
               isCompletedListPayload.map(-> payload)
       )
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .fromSource @todoList
-        .toConnectionTarget @toggleAllDynamicChannelVar
-        .withTransform (todoListPayload) =>
-          return null unless todoListPayload?
-          todoListPayload
-            .map ({isCompletedVar}) -> isCompletedVar
-    )
+    @defineSimpleChannel()
+      .fromSource @todoList
+      .toConnectionTarget @toggleAllDynamicChannelVar
+      .withTransform (todoListPayload) =>
+        return null unless todoListPayload?
+        todoListPayload
+          .map ({isCompletedVar}) -> isCompletedVar
 
 
 
@@ -250,34 +232,29 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel
     @filteredTodoList = new Transmitter.Nodes.List()
 
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .fromSource @todoListView.viewList
-        .toConnectionTarget @removeTodoChannelList
-        .withTransform (todoViews) =>
-          todoViews?.map (todoView) =>
-            todoView.createRemoveTodoChannel()
-              .toTarget(@todoList)
-    )
+    @defineSimpleChannel()
+      .fromSource @todoListView.viewList
+      .toConnectionTarget @removeTodoChannelList
+      .withTransform (todoViews) =>
+        todoViews?.map (todoView) =>
+          todoView.createRemoveTodoChannel()
+            .toTarget(@todoList)
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inForwardDirection()
-        .fromSources @todoListWithComplete, @activeFilter
-        .toTarget @filteredTodoList
-        .withTransform ([todoListPayload, activeFilterPayload]) =>
-          filter = activeFilterPayload.get()
-          todoListPayload
-            .filter ([todo, isCompleted]) ->
-              switch filter
-                when 'active'    then !isCompleted
-                when 'completed' then isCompleted
-                else true
-            .map ([todo]) -> todo
-    )
+    @defineSimpleChannel()
+      .inForwardDirection()
+      .fromSources @todoListWithComplete, @activeFilter
+      .toTarget @filteredTodoList
+      .withTransform ([todoListPayload, activeFilterPayload]) =>
+        filter = activeFilterPayload.get()
+        todoListPayload
+          .filter ([todo, isCompleted]) ->
+            switch filter
+              when 'active'    then !isCompleted
+              when 'completed' then isCompleted
+              else true
+          .map ([todo]) -> todo
 
-    @addChannel(
-      new Transmitter.Channels.ListChannel()
+    @defineListChannel()
       .inForwardDirection()
       .withOrigin @filteredTodoList
       .withMapOrigin (todo, tr) -> new TodoView(todo).init(tr)
@@ -287,18 +264,15 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel
         channel.todo == todo and channel.todoView == todoView
       .withOriginDerivedChannel (todo, todoView) ->
         new TodoViewChannel(todo, todoView)
-    )
 
     @addChannel(
       new ToggleAllChannel(@todoList, @todoListWithComplete,
         @todoListView.toggleAllCheckboxVar, @todoListView.toggleAllChangeEvt)
     )
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inForwardDirection()
-        .fromSource @todoList
-        .toTarget @todoListView.isVisibleVar
-        .withTransform (todoListPayload) ->
-          todoListPayload.toSetVariable().map (todos) -> todos.length > 0
-    )
+    @defineSimpleChannel()
+      .inForwardDirection()
+      .fromSource @todoList
+      .toTarget @todoListView.isVisibleVar
+      .withTransform (todoListPayload) ->
+        todoListPayload.toSetVariable().map (todos) -> todos.length > 0

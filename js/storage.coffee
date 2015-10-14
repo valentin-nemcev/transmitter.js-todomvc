@@ -4,7 +4,7 @@
 Transmitter = require 'transmitter'
 
 
-module.exports = class TodoStorage extends Transmitter.Nodes.Record
+module.exports = class TodoStorage
 
   constructor: (@name) ->
     @todoListPersistenceVar =
@@ -28,27 +28,23 @@ module.exports = class TodoStorage extends Transmitter.Nodes.Record
 class SerializedTodoChannel extends Transmitter.Channels.CompositeChannel
 
   constructor: (@todo, @serializedTodoVar) ->
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inForwardDirection()
-        .fromSources @todo.labelVar, @todo.isCompletedVar
-        .toTarget @serializedTodoVar
-        .withTransform ([labelPayload, isCompletedPayload]) =>
-          labelPayload.merge(isCompletedPayload).map ([label, isCompleted]) ->
-            {title: label, completed: isCompleted}
-    )
+    @defineSimpleChannel()
+      .inForwardDirection()
+      .fromSources @todo.labelVar, @todo.isCompletedVar
+      .toTarget @serializedTodoVar
+      .withTransform ([labelPayload, isCompletedPayload]) =>
+        labelPayload.merge(isCompletedPayload).map ([label, isCompleted]) ->
+          {title: label, completed: isCompleted}
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inBackwardDirection()
-        .fromSource @serializedTodoVar
-        .toTargets @todo.labelVar, @todo.isCompletedVar
-        .withTransform (serializedTodoPayload) =>
-          serializedTodoPayload.map((serialized) ->
-            {title, completed} = (serialized ? {})
-            [title, completed]
-          ).separate()
-    )
+    @defineSimpleChannel()
+      .inBackwardDirection()
+      .fromSource @serializedTodoVar
+      .toTargets @todo.labelVar, @todo.isCompletedVar
+      .withTransform (serializedTodoPayload) =>
+        serializedTodoPayload.map((serialized) ->
+          {title, completed} = (serialized ? {})
+          [title, completed]
+        ).separate()
 
 
 class TodoListPersistenceChannel extends Transmitter.Channels.CompositeChannel
@@ -59,48 +55,42 @@ class TodoListPersistenceChannel extends Transmitter.Channels.CompositeChannel
     @serializedTodoList = new Transmitter.Nodes.List()
     @serializedTodosVar = new Transmitter.Nodes.Variable()
 
-    @addChannel(
-      new Transmitter.Channels.VariableChannel()
-        .withOrigin @serializedTodosVar
-        .withDerived @todoListPersistenceVar
-        .withMapOrigin (serializedTodos) ->
-          JSON.stringify(serializedTodos)
-        .withMapDerived (persistedTodos) ->
-          JSON.parse(persistedTodos)
-    )
+    @defineVariableChannel()
+      .withOrigin @serializedTodosVar
+      .withDerived @todoListPersistenceVar
+      .withMapOrigin (serializedTodos) ->
+        JSON.stringify(serializedTodos)
+      .withMapDerived (persistedTodos) ->
+        JSON.parse(persistedTodos)
 
-    @addChannel(
-      new Transmitter.Channels.ListChannel()
-        .withOrigin @todos.todoList
-        .withMapOrigin (todo) ->
-          serializedVar = new Transmitter.Nodes.Variable()
-          serializedVar.todo = todo
+    @defineListChannel()
+      .withOrigin @todos.todoList
+      .withMapOrigin (todo) ->
+        serializedVar = new Transmitter.Nodes.Variable()
+        serializedVar.todo = todo
+        id = serializedId++
+        serializedVar.inspect = -> "[serializedTodoVar#{id} #{@todo}]"
+        return serializedVar
+      .withDerived @serializedTodoList
+      .withMapDerived (serializedVar) =>
+        todo = @todos.create()
+        serializedVar.todo = todo
+        return todo
+      .withMatchOriginDerived (todo, serializedTodoVar) ->
+        todo == serializedTodoVar.todo
+      .withOriginDerivedChannel (todo, serializedTodoVar) ->
+        new SerializedTodoChannel(todo, serializedTodoVar)
+
+    @defineSimpleChannel()
+      .inBackwardDirection()
+      .fromSource @serializedTodosVar
+      .toTarget @serializedTodoList
+      .withTransform (serializedTodosPayload) ->
+        serializedTodosPayload.toSetList().map ->
+          v = new Transmitter.Nodes.Variable()
           id = serializedId++
-          serializedVar.inspect = -> "[serializedTodoVar#{id} #{@todo}]"
-          return serializedVar
-        .withDerived @serializedTodoList
-        .withMapDerived (serializedVar) =>
-          todo = @todos.create()
-          serializedVar.todo = todo
-          return todo
-        .withMatchOriginDerived (todo, serializedTodoVar) ->
-          todo == serializedTodoVar.todo
-        .withOriginDerivedChannel (todo, serializedTodoVar) ->
-          new SerializedTodoChannel(todo, serializedTodoVar)
-    )
-
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .inBackwardDirection()
-        .fromSource @serializedTodosVar
-        .toTarget @serializedTodoList
-        .withTransform (serializedTodosPayload) ->
-          serializedTodosPayload.toSetList().map ->
-            v = new Transmitter.Nodes.Variable()
-            id = serializedId++
-            v.inspect = -> "[serializedTodoVar#{id} #{@todo}]"
-            return v
-    )
+          v.inspect = -> "[serializedTodoVar#{id} #{@todo}]"
+          return v
 
     @todoPersistenceForwardChannelVar =
       new Transmitter.ChannelNodes.DynamicChannelVariable('sources', =>
@@ -120,9 +110,7 @@ class TodoListPersistenceChannel extends Transmitter.Channels.CompositeChannel
             serializedTodosPayload.toSetList().unflatten()
       )
 
-    @addChannel(
-      new Transmitter.Channels.SimpleChannel()
-        .fromSource @serializedTodoList
-        .toConnectionTargets \
-          @todoPersistenceBackwardChannelVar, @todoPersistenceForwardChannelVar
-    )
+    @defineSimpleChannel()
+      .fromSource @serializedTodoList
+      .toConnectionTargets \
+        @todoPersistenceBackwardChannelVar, @todoPersistenceForwardChannelVar
