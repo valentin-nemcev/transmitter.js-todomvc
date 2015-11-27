@@ -1,4 +1,4 @@
-import * as Transmitter from 'transmitter';
+import * as Transmitter from 'transmitter-framework/index.es';
 
 
 export default class TodoStorage {
@@ -27,6 +27,7 @@ export default class TodoStorage {
 
 class SerializedTodoChannel extends Transmitter.Channels.CompositeChannel {
   constructor(todo, serializedTodoVar) {
+    super();
     this.todo = todo;
     this.serializedTodoVar = serializedTodoVar;
 
@@ -61,6 +62,7 @@ class TodoListPersistenceChannel
 extends Transmitter.Channels.CompositeChannel {
 
   constructor(todos, todoListPersistenceVar) {
+    super();
     this.todos = todos;
     this.todoListPersistenceVar = todoListPersistenceVar;
     this.serializedTodoList = new Transmitter.Nodes.List();

@@ -2,7 +2,7 @@
 
 import $ from 'jquery';
 
-import * as Transmitter from 'transmitter/index.es';
+import * as Transmitter from 'transmitter-framework/index.es';
 
 import Todos       from './model';
 import TodoStorage from './storage';

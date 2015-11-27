@@ -1,6 +1,6 @@
 import keycode from 'keycode';
 
-import * as Transmitter from 'transmitter/index.es';
+import * as Transmitter from 'transmitter-framework/index.es';
 
 
 export function getKeycodeMatcher(...keys) {
@@ -14,6 +14,7 @@ export function getKeycodeMatcher(...keys) {
 export class VisibilityToggleVar extends Transmitter.Nodes.Variable {
 
   constructor($element) {
+    super();
     this.$element = $element;
   }
 
@@ -31,6 +32,7 @@ export class VisibilityToggleVar extends Transmitter.Nodes.Variable {
 export class ClassToggleVar extends Transmitter.Nodes.Variable {
 
   constructor($element, _class) {
+    super();
     this.$element = $element;
     this.class = _class;
   }

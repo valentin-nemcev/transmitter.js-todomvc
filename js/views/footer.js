@@ -1,9 +1,10 @@
-import * as Transmitter from 'transmitter';
+import * as Transmitter from 'transmitter-framework/index.es';
 
 import {VisibilityToggleVar} from '../helpers';
 
 class ActiveFilterSelector extends Transmitter.Nodes.Variable {
   constructor($filters) {
+    super();
     this.$filters = $filters;
   }
 
@@ -58,6 +59,7 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
     todoListFooterView,
     activeFilter
   ) {
+    super();
     this.todoList = todoList;
     this.todoListWithComplete = todoListWithComplete;
     this.todoListFooterView = todoListFooterView;

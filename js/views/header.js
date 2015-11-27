@@ -1,4 +1,4 @@
-import * as Transmitter from 'transmitter';
+import * as Transmitter from 'transmitter-framework/index.es';
 
 import {getKeycodeMatcher} from '../helpers';
 

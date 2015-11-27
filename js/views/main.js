@@ -2,7 +2,7 @@ import {inspect} from 'util';
 
 import $ from 'jquery';
 
-import * as Transmitter from 'transmitter/index.es';
+import * as Transmitter from 'transmitter-framework/index.es';
 
 import {
   getKeycodeMatcher,
@@ -13,6 +13,7 @@ import {
 class EditStateChannel extends Transmitter.Channels.CompositeChannel {
 
   constructor(todoView) {
+    super();
     this.todoView = todoView;
 
     this.defineSimpleChannel()
@@ -125,6 +126,7 @@ class TodoViewChannel extends Transmitter.Channels.CompositeChannel {
   }
 
   constructor(todo, todoView) {
+    super();
     this.todo = todo;
     this.todoView = todoView;
 
@@ -213,10 +215,13 @@ export default class MainView {
 
 class ToggleAllChannel extends Transmitter.Channels.CompositeChannel {
 
-  constructor(todoList,
-              todoListWithComplete,
-              toggleAllCheckboxVar,
-              toggleAllChangeEvt) {
+  constructor(
+    todoList,
+    todoListWithComplete,
+    toggleAllCheckboxVar,
+    toggleAllChangeEvt
+  ) {
+    super();
     this.todoList = todoList;
     this.todoListWithComplete = todoListWithComplete;
     this.toggleAllCheckboxVar = toggleAllCheckboxVar;
@@ -271,6 +276,7 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel {
   }
 
   constructor(todoList, todoListWithComplete, todoListView, activeFilter) {
+    super();
     this.todoList = todoList;
     this.todoListWithComplete = todoListWithComplete;
     this.todoListView = todoListView;

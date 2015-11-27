@@ -1,6 +1,6 @@
 import {inspect} from 'util';
 
-import * as Transmitter from 'transmitter';
+import * as Transmitter from 'transmitter-framework/index.es';
 
 export default class Todos {
   constructor() {
@@ -57,6 +57,7 @@ function nonBlank(str) {
 
 class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel {
   constructor(nonBlankTodoList, todoList) {
+    super();
     this.nonBlankTodoList = nonBlankTodoList;
     this.todoList = todoList;
 
@@ -103,6 +104,7 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel {
 class TodoListWithCompleteChannel
 extends Transmitter.Channels.CompositeChannel {
   constructor(todoList, todoListWithComplete) {
+    super();
     this.todoList = todoList;
     this.todoListWithComplete = todoListWithComplete;
 
