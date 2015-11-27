@@ -46,11 +46,11 @@ class App {
     this.todoStorage.setDefault([
       {
         title: 'Todo 1',
-        completed: false
+        completed: false,
       }, {
         title: 'Todo 2',
-        completed: true
-      }
+        completed: true,
+      },
     ]);
 
     this.todoStorage.createTodosChannel(this.todos).init(tr);

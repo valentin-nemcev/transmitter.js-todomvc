@@ -13,10 +13,10 @@ class ActiveFilterSelector extends Transmitter.Nodes.Variable {
   }
 
   set(filter) {
-    if (filter === 'all') filter = '';
+    const href = filter === 'all' ? '' : filter;
     this.$filters
       .find('a').removeClass('selected')
-      .filter(`[href='#/${filter}']`).addClass('selected');
+      .filter(`[href='#/${href}']`).addClass('selected');
     return this;
   }
 }
@@ -26,11 +26,14 @@ export default class FooterView {
     this.$element = $element;
     this.$clearCompleted = this.$element.find('.clear-completed');
 
-    this.completeCountVar = new Transmitter.DOMElement.TextVar(this.$element.find('.todo-count')[0]);
+    this.completeCountVar =
+      new Transmitter.DOMElement.TextVar(this.$element.find('.todo-count')[0]);
 
-    this.clearCompletedIsVisibleVar = new VisibilityToggleVar(this.$clearCompleted);
+    this.clearCompletedIsVisibleVar =
+      new VisibilityToggleVar(this.$clearCompleted);
 
-    this.clearCompletedClickEvt = new Transmitter.DOMElement.DOMEvent(this.$clearCompleted[0], 'click');
+    this.clearCompletedClickEvt =
+      new Transmitter.DOMElement.DOMEvent(this.$clearCompleted[0], 'click');
 
     this.isVisibleVar = new VisibilityToggleVar(this.$element);
 
@@ -49,7 +52,12 @@ export default class FooterView {
 
 
 class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
-  constructor(todoList, todoListWithComplete, todoListFooterView, activeFilter) {
+  constructor(
+    todoList,
+    todoListWithComplete,
+    todoListFooterView,
+    activeFilter
+  ) {
     this.todoList = todoList;
     this.todoListWithComplete = todoListWithComplete;
     this.todoListFooterView = todoListFooterView;

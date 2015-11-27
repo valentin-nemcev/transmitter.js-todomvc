@@ -57,7 +57,8 @@ class SerializedTodoChannel extends Transmitter.Channels.CompositeChannel {
 
 let serializedId = 0;
 
-class TodoListPersistenceChannel extends Transmitter.Channels.CompositeChannel {
+class TodoListPersistenceChannel
+extends Transmitter.Channels.CompositeChannel {
 
   constructor(todos, todoListPersistenceVar) {
     this.todos = todos;
@@ -74,18 +75,16 @@ class TodoListPersistenceChannel extends Transmitter.Channels.CompositeChannel {
     this.defineListChannel()
     .withOrigin(this.todos.todoList)
     .withMapOrigin( (todo) => {
-      var id, serializedVar;
-      serializedVar = new Transmitter.Nodes.Variable();
+      const serializedVar = new Transmitter.Nodes.Variable();
       serializedVar.todo = todo;
-      id = serializedId++;
+      const id = serializedId++;
       serializedVar.inspect = () =>
         '[serializedTodoVar' + id + ' ' + this.todo + ']';
       return serializedVar;
     })
     .withDerived(this.serializedTodoList)
     .withMapDerived( (serializedVar) => {
-      var todo;
-      todo = this.todos.create();
+      const todo = this.todos.create();
       serializedVar.todo = todo;
       return todo;
     })
@@ -100,11 +99,10 @@ class TodoListPersistenceChannel extends Transmitter.Channels.CompositeChannel {
       .inBackwardDirection()
       .fromSource(this.serializedTodosVar)
       .toTarget(this.serializedTodoList)
-      .withTransform( (serializedTodosPayload) => 
+      .withTransform( (serializedTodosPayload) =>
         serializedTodosPayload.toSetList().map(function() {
-          var id, v;
-          v = new Transmitter.Nodes.Variable();
-          id = serializedId++;
+          const v = new Transmitter.Nodes.Variable();
+          const id = serializedId++;
           v.inspect = () =>
             '[serializedTodoVar' + id + ' ' + this.todo + ']';
           return v;

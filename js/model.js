@@ -74,8 +74,8 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel {
       .withTransform(
         (todoListPayload) =>
           todoListPayload.toSetVariable().map(
-            (todoList) =>
-              this.createNonBlankTodoChannel(todoList)
+            (todos) =>
+              this.createNonBlankTodoChannel(todos)
                 .inBackwardDirection()
                 .toTarget(this.nonBlankTodoList)
         )
@@ -88,12 +88,11 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel {
       .withTransform( (labelPayloads) =>
         Transmitter.Payloads.Variable.merge(labelPayloads).map(
           function(labels) {
-            var i, _results;
-            _results = [];
-            for (i = 0; i < labels.length; i++) {
-              if (nonBlank(labels[i])) _results.push(todos[i]);
+            const results = [];
+            for (let i = 0; i < labels.length; i++) {
+              if (nonBlank(labels[i])) results.push(todos[i]);
             }
-            return _results;
+            return results;
           }
         )
       );

@@ -4,8 +4,11 @@ import $ from 'jquery';
 
 import * as Transmitter from 'transmitter/index.es';
 
-import {getKeycodeMatcher, VisibilityToggleVar, ClassToggleVar}
-from '../helpers';
+import {
+  getKeycodeMatcher,
+  VisibilityToggleVar,
+  ClassToggleVar,
+} from '../helpers';
 
 class EditStateChannel extends Transmitter.Channels.CompositeChannel {
 
@@ -224,8 +227,8 @@ class ToggleAllChannel extends Transmitter.Channels.CompositeChannel {
       .fromSource(this.todoListWithComplete)
       .toTarget(this.toggleAllCheckboxVar)
       .withTransform(
-        (todoListWithComplete) =>
-          todoListWithComplete.toSetVariable().map(
+        (todoListWithCompletePayload) =>
+          todoListWithCompletePayload.toSetVariable().map(
             (todos) => todos.every( ([, isCompleted]) => isCompleted )
           )
       );
@@ -281,7 +284,7 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel {
       .toConnectionTarget(this.removeTodoChannelList)
       .withTransform(
         (todoViews) =>
-          todoViews != null 
+          todoViews != null
             ? todoViews.map(
               (todoView) =>
                 todoView.createRemoveTodoChannel().toTarget(this.todoList)
