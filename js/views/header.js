@@ -13,8 +13,8 @@ export default class HeaderView {
     this.$element = $element;
     this.$newTodoInput = this.$element.find('.new-todo');
 
-    this.newTodoLabelInputVar =
-      new Transmitter.DOMElement.InputValueVar(this.$newTodoInput[0]);
+    this.newTodoLabelInputValue =
+      new Transmitter.DOMElement.InputValueValue(this.$newTodoInput[0]);
     this.newTodoKeypressEvt =
       new Transmitter.DOMElement.DOMEvent(this.$newTodoInput[0], 'keyup');
 
@@ -22,7 +22,7 @@ export default class HeaderView {
       new Transmitter.Channels.SimpleChannel()
         .inForwardDirection()
         .fromSource(this.newTodoKeypressEvt)
-        .toTarget(this.newTodoLabelInputVar)
+        .toTarget(this.newTodoLabelInputValue)
         .withTransform(
           (keypressPayload) => matchEscEnter(keypressPayload).map( () => '' )
         );
@@ -36,7 +36,7 @@ export default class HeaderView {
   createTodosChannel(todos) {
     return new Transmitter.Channels.SimpleChannel()
     .inBackwardDirection()
-    .fromSources(this.newTodoLabelInputVar, this.newTodoKeypressEvt)
+    .fromSources(this.newTodoLabelInputValue, this.newTodoKeypressEvt)
     .toTarget(todos.todoList)
     .withTransform(
       ([labelPayload, keypressPayload], tr) =>

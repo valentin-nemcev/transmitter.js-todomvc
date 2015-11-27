@@ -29,21 +29,21 @@ export default class Todos {
 
 class Todo {
   inspect() {
-    return '[Todo ' + (inspect(this.labelVar.get())) + ']';
+    return '[Todo ' + (inspect(this.labelValue.get())) + ']';
   }
 
   constructor() {
-    this.labelVar = new Transmitter.Nodes.Variable();
-    this.isCompletedVar = new Transmitter.Nodes.Variable();
+    this.labelValue = new Transmitter.Nodes.Value();
+    this.isCompletedValue = new Transmitter.Nodes.Value();
   }
 
   init(tr, defaults = {}) {
     const {label, isCompleted} = defaults;
     if (label != null) {
-      this.labelVar.init(tr, label);
+      this.labelValue.init(tr, label);
     }
     if (isCompleted != null) {
-      this.isCompletedVar.init(tr, isCompleted);
+      this.isCompletedValue.init(tr, isCompleted);
     }
     return this;
   }
@@ -61,8 +61,8 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel {
     this.nonBlankTodoList = nonBlankTodoList;
     this.todoList = todoList;
 
-    this.nonBlankTodoChannelVar =
-      new Transmitter.ChannelNodes.ChannelVariable();
+    this.nonBlankTodoChannelValue =
+      new Transmitter.ChannelNodes.ChannelValue();
 
     this.defineListChannel()
       .inForwardDirection()
@@ -71,10 +71,10 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel {
 
     this.defineSimpleChannel()
       .fromSource(this.todoList)
-      .toConnectionTarget(this.nonBlankTodoChannelVar)
+      .toConnectionTarget(this.nonBlankTodoChannelValue)
       .withTransform(
         (todoListPayload) =>
-          todoListPayload.toSetVariable().map(
+          todoListPayload.toSetValue().map(
             (todos) =>
               this.createNonBlankTodoChannel(todos)
                 .inBackwardDirection()
@@ -85,9 +85,9 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel {
 
   createNonBlankTodoChannel(todos) {
     new Transmitter.Channels.SimpleChannel()
-      .fromDynamicSources(todos.map( (todo) => todo.labelVar ))
+      .fromDynamicSources(todos.map( (todo) => todo.labelValue ))
       .withTransform( (labelPayloads) =>
-        Transmitter.Payloads.Variable.merge(labelPayloads).map(
+        Transmitter.Payloads.Value.merge(labelPayloads).map(
           function(labels) {
             const results = [];
             for (let i = 0; i < labels.length; i++) {
@@ -118,8 +118,8 @@ extends Transmitter.Channels.CompositeChannel {
       );
 
     this.isCompletedList = new Transmitter.Nodes.List();
-    this.isCompletedDynamicChannelVar =
-      new Transmitter.ChannelNodes.DynamicChannelVariable('sources', () =>
+    this.isCompletedDynamicChannelValue =
+      new Transmitter.ChannelNodes.DynamicChannelValue('sources', () =>
         new Transmitter.Channels.SimpleChannel()
           .inForwardDirection()
           .toTarget(this.isCompletedList)
@@ -130,10 +130,10 @@ extends Transmitter.Channels.CompositeChannel {
 
     this.defineSimpleChannel()
       .fromSource(this.todoList)
-      .toConnectionTarget(this.isCompletedDynamicChannelVar)
+      .toConnectionTarget(this.isCompletedDynamicChannelValue)
       .withTransform(
         (todoListPayload) =>
-          todoListPayload.map( (todo) => todo.isCompletedVar )
+          todoListPayload.map( (todo) => todo.isCompletedValue )
       );
 
     this.defineSimpleChannel()

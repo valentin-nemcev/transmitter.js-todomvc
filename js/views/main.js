@@ -6,8 +6,8 @@ import * as Transmitter from 'transmitter-framework/index.es';
 
 import {
   getKeycodeMatcher,
-  VisibilityToggleVar,
-  ClassToggleVar,
+  VisibilityToggleValue,
+  ClassToggleValue,
 } from '../helpers';
 
 class EditStateChannel extends Transmitter.Channels.CompositeChannel {
@@ -19,7 +19,7 @@ class EditStateChannel extends Transmitter.Channels.CompositeChannel {
     this.defineSimpleChannel()
       .inBackwardDirection()
       .fromSource(this.todoView.startEditEvt)
-      .toTarget(this.todoView.editStateVar)
+      .toTarget(this.todoView.editStateValue)
       .withTransform(
         (startEditPayload) => startEditPayload.map( () => true )
       );
@@ -27,7 +27,7 @@ class EditStateChannel extends Transmitter.Channels.CompositeChannel {
     this.defineSimpleChannel()
       .inBackwardDirection()
       .fromSource(this.todoView.acceptEditEvt)
-      .toTarget(this.todoView.editStateVar)
+      .toTarget(this.todoView.editStateValue)
       .withTransform(
         (acceptEditPayload) => acceptEditPayload.map( () => false )
       );
@@ -35,7 +35,7 @@ class EditStateChannel extends Transmitter.Channels.CompositeChannel {
     this.defineSimpleChannel()
       .inBackwardDirection()
       .fromSource(this.todoView.rejectEditEvt)
-      .toTarget(this.todoView.editStateVar)
+      .toTarget(this.todoView.editStateValue)
       .withTransform(
         (rejectEditPayload) => rejectEditPayload.map( () => false )
       );
@@ -46,7 +46,7 @@ class EditStateChannel extends Transmitter.Channels.CompositeChannel {
 class TodoView {
 
   inspect() {
-    return '[TodoView ' + inspect(this.todo.labelVar.get()) + ']';
+    return '[TodoView ' + inspect(this.todo.labelValue.get()) + ']';
   }
 
   constructor(todo) {
@@ -61,14 +61,14 @@ class TodoView {
       this.$edit = $('<input/>', {class: 'edit'})
     );
 
-    this.labelVar =
-      new Transmitter.DOMElement.TextVar(this.$label[0]);
+    this.labelValue =
+      new Transmitter.DOMElement.TextValue(this.$label[0]);
 
-    this.labelInputVar =
-      new Transmitter.DOMElement.InputValueVar(this.$edit[0]);
+    this.labelInputValue =
+      new Transmitter.DOMElement.InputValueValue(this.$edit[0]);
 
-    this.isCompletedInputVar =
-      new Transmitter.DOMElement.CheckboxStateVar(this.$checkbox[0]);
+    this.isCompletedInputValue =
+      new Transmitter.DOMElement.CheckboxStateValue(this.$checkbox[0]);
 
     this.labelDblclickEvt =
       new Transmitter.DOMElement.DOMEvent(this.$label[0], 'dblclick');
@@ -79,8 +79,8 @@ class TodoView {
     this.destroyClickEvt =
       new Transmitter.DOMElement.DOMEvent(this.$destroy[0], 'click');
 
-    this.isCompletedClassVar = new ClassToggleVar(this.$element, 'completed');
-    this.editStateVar = new ClassToggleVar(this.$element, 'editing');
+    this.isCompletedClassValue = new ClassToggleValue(this.$element, 'completed');
+    this.editStateValue = new ClassToggleValue(this.$element, 'editing');
 
     this.startEditEvt = this.labelDblclickEvt;
     this.acceptEditEvt = new Transmitter.Nodes.RelayNode();
@@ -100,7 +100,7 @@ class TodoView {
   }
 
   init(tr) {
-    this.editStateVar.init(tr, false);
+    this.editStateValue.init(tr, false);
     this.acceptEditChannel.init(tr);
     this.rejectEditChannel.init(tr);
     this.editStateChannel = new EditStateChannel(this).init(tr);
@@ -130,14 +130,14 @@ class TodoViewChannel extends Transmitter.Channels.CompositeChannel {
     this.todo = todo;
     this.todoView = todoView;
 
-    this.defineVariableChannel()
-      .withOrigin(this.todo.labelVar)
-      .withDerived(this.todoView.labelVar);
+    this.defineValueChannel()
+      .withOrigin(this.todo.labelValue)
+      .withDerived(this.todoView.labelValue);
 
     this.defineSimpleChannel()
       .inBackwardDirection()
-      .fromSources(this.todoView.labelInputVar, this.todoView.acceptEditEvt)
-      .toTarget(this.todo.labelVar)
+      .fromSources(this.todoView.labelInputValue, this.todoView.acceptEditEvt)
+      .toTarget(this.todo.labelValue)
       .withTransform(
         ([labelPayload, acceptPayload]) =>
           labelPayload.replaceByNoop(acceptPayload)
@@ -146,24 +146,24 @@ class TodoViewChannel extends Transmitter.Channels.CompositeChannel {
     this.defineSimpleChannel()
       .inForwardDirection()
       .fromSources(
-        this.todo.labelVar,
+        this.todo.labelValue,
         this.todoView.startEditEvt,
         this.todoView.rejectEditEvt
       )
-      .toTarget(this.todoView.labelInputVar)
+      .toTarget(this.todoView.labelInputValue)
       .withTransform(
         ([labelPayload, startPayload, rejectPayload]) =>
           labelPayload.replaceByNoop(startPayload.replaceNoopBy(rejectPayload))
       );
 
-    this.defineVariableChannel()
-      .withOrigin(this.todo.isCompletedVar)
-      .withDerived(this.todoView.isCompletedInputVar);
+    this.defineValueChannel()
+      .withOrigin(this.todo.isCompletedValue)
+      .withDerived(this.todoView.isCompletedInputValue);
 
-    this.defineVariableChannel()
+    this.defineValueChannel()
       .inForwardDirection()
-      .withOrigin(this.todo.isCompletedVar)
-      .withDerived(this.todoView.isCompletedClassVar);
+      .withOrigin(this.todo.isCompletedValue)
+      .withDerived(this.todoView.isCompletedClassValue);
   }
 }
 
@@ -192,13 +192,13 @@ export default class MainView {
         );
 
     const $toggleAll = this.$element.find('.toggle-all');
-    this.toggleAllCheckboxVar =
-      new Transmitter.DOMElement.CheckboxStateVar($toggleAll[0]);
+    this.toggleAllCheckboxValue =
+      new Transmitter.DOMElement.CheckboxStateValue($toggleAll[0]);
 
     this.toggleAllChangeEvt =
       new Transmitter.DOMElement.DOMEvent($toggleAll[0], 'click');
 
-    this.isVisibleVar = new VisibilityToggleVar(this.$element);
+    this.isVisibleValue = new VisibilityToggleValue(this.$element);
   }
 
   init(tr) {
@@ -218,33 +218,33 @@ class ToggleAllChannel extends Transmitter.Channels.CompositeChannel {
   constructor(
     todoList,
     todoListWithComplete,
-    toggleAllCheckboxVar,
+    toggleAllCheckboxValue,
     toggleAllChangeEvt
   ) {
     super();
     this.todoList = todoList;
     this.todoListWithComplete = todoListWithComplete;
-    this.toggleAllCheckboxVar = toggleAllCheckboxVar;
+    this.toggleAllCheckboxValue = toggleAllCheckboxValue;
     this.toggleAllChangeEvt = toggleAllChangeEvt;
 
     this.defineSimpleChannel()
       .inForwardDirection()
       .fromSource(this.todoListWithComplete)
-      .toTarget(this.toggleAllCheckboxVar)
+      .toTarget(this.toggleAllCheckboxValue)
       .withTransform(
         (todoListWithCompletePayload) =>
-          todoListWithCompletePayload.toSetVariable().map(
+          todoListWithCompletePayload.toSetValue().map(
             (todos) => todos.every( ([, isCompleted]) => isCompleted )
           )
       );
 
-    this.toggleAllDynamicChannelVar =
-      new Transmitter.ChannelNodes.DynamicChannelVariable(
+    this.toggleAllDynamicChannelValue =
+      new Transmitter.ChannelNodes.DynamicChannelValue(
         'targets',
         () =>
           new Transmitter.Channels.SimpleChannel()
             .inBackwardDirection()
-            .fromSources(this.toggleAllCheckboxVar, this.toggleAllChangeEvt)
+            .fromSources(this.toggleAllCheckboxValue, this.toggleAllChangeEvt)
             .withTransform(
               ([isCompletedPayload, changePayload],
                isCompletedListPayload) => {
@@ -258,11 +258,11 @@ class ToggleAllChannel extends Transmitter.Channels.CompositeChannel {
 
     this.defineSimpleChannel()
       .fromSource(this.todoList)
-      .toConnectionTarget(this.toggleAllDynamicChannelVar)
+      .toConnectionTarget(this.toggleAllDynamicChannelValue)
       .withTransform(
         (todoListPayload) => {
           if (todoListPayload == null) return null;
-          return todoListPayload.map( ({isCompletedVar}) => isCompletedVar );
+          return todoListPayload.map( ({isCompletedValue}) => isCompletedValue );
         }
       );
   }
@@ -344,7 +344,7 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel {
       new ToggleAllChannel(
         this.todoList,
         this.todoListWithComplete,
-        this.todoListView.toggleAllCheckboxVar,
+        this.todoListView.toggleAllCheckboxValue,
         this.todoListView.toggleAllChangeEvt
       )
     );
@@ -352,10 +352,10 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel {
     this.defineSimpleChannel()
       .inForwardDirection()
       .fromSource(this.todoList)
-      .toTarget(this.todoListView.isVisibleVar)
+      .toTarget(this.todoListView.isVisibleValue)
       .withTransform(
         (todoListPayload) =>
-          todoListPayload.toSetVariable().map( (todos) => todos.length > 0 )
+          todoListPayload.toSetValue().map( (todos) => todos.length > 0 )
       );
   }
 }

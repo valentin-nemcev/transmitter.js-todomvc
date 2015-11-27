@@ -21,7 +21,7 @@ class App {
     this.footerView = new FooterView($('.footer'));
 
     this.locationHash = new Transmitter.Browser.LocationHash();
-    this.activeFilter = new Transmitter.Nodes.Variable();
+    this.activeFilter = new Transmitter.Nodes.Value();
     this.locationHashChannel = new Transmitter.Channels.SimpleChannel()
       .inBackwardDirection()
       .fromSource(this.locationHash)

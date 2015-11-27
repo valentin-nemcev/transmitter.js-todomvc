@@ -1,8 +1,8 @@
 import * as Transmitter from 'transmitter-framework/index.es';
 
-import {VisibilityToggleVar} from '../helpers';
+import {VisibilityToggleValue} from '../helpers';
 
-class ActiveFilterSelector extends Transmitter.Nodes.Variable {
+class ActiveFilterSelector extends Transmitter.Nodes.Value {
   constructor($filters) {
     super();
     this.$filters = $filters;
@@ -27,16 +27,16 @@ export default class FooterView {
     this.$element = $element;
     this.$clearCompleted = this.$element.find('.clear-completed');
 
-    this.completeCountVar =
-      new Transmitter.DOMElement.TextVar(this.$element.find('.todo-count')[0]);
+    this.completeCountValue =
+      new Transmitter.DOMElement.TextValue(this.$element.find('.todo-count')[0]);
 
-    this.clearCompletedIsVisibleVar =
-      new VisibilityToggleVar(this.$clearCompleted);
+    this.clearCompletedIsVisibleValue =
+      new VisibilityToggleValue(this.$clearCompleted);
 
     this.clearCompletedClickEvt =
       new Transmitter.DOMElement.DOMEvent(this.$clearCompleted[0], 'click');
 
-    this.isVisibleVar = new VisibilityToggleVar(this.$element);
+    this.isVisibleValue = new VisibilityToggleValue(this.$element);
 
     const $filters = this.$element.find('.filters');
     this.activeFilter = new ActiveFilterSelector($filters);
@@ -73,12 +73,12 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
     this.defineSimpleChannel()
       .inForwardDirection()
       .fromSource(this.todoListWithComplete)
-      .toTarget(this.todoListFooterView.completeCountVar)
+      .toTarget(this.todoListFooterView.completeCountValue)
       .withTransform(
         (todoListWithCompletePayload) =>
           todoListWithCompletePayload
             .filter( ([, isCompleted]) => !isCompleted )
-            .toSetVariable()
+            .toSetValue()
             .map(
               ({length}) => [length, length === 1 ? 'item' : 'items'].join(' ')
             )
@@ -87,12 +87,12 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
     this.defineSimpleChannel()
       .inForwardDirection()
       .fromSource(this.todoListWithComplete)
-      .toTarget(this.todoListFooterView.clearCompletedIsVisibleVar)
+      .toTarget(this.todoListFooterView.clearCompletedIsVisibleValue)
       .withTransform(
         (todoListWithCompletePayload) =>
           todoListWithCompletePayload
             .filter( ([, isCompleted]) => isCompleted )
-            .toSetVariable()
+            .toSetValue()
             .map( ({length}) => length > 0 )
       );
 
@@ -114,10 +114,10 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
     this.defineSimpleChannel()
       .inForwardDirection()
       .fromSource(this.todoList)
-      .toTarget(this.todoListFooterView.isVisibleVar)
+      .toTarget(this.todoListFooterView.isVisibleValue)
       .withTransform(
         (todoListPayload) =>
-          todoListPayload.toSetVariable().map( ({length}) => length > 0 )
+          todoListPayload.toSetValue().map( ({length}) => length > 0 )
       );
   }
 }
