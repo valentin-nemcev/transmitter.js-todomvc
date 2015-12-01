@@ -20,7 +20,9 @@ export default class TodoStorage {
   }
 
   createTodosChannel(todos) {
-    return new TodoListPersistenceChannel(todos, this.todoListPersistenceValue);
+    return new TodoListPersistenceChannel(
+      todos, this.todoListPersistenceValue
+    );
   }
 }
 
@@ -51,7 +53,7 @@ class SerializedTodoChannel extends Transmitter.Channels.CompositeChannel {
           serializedTodoPayload.map( (serialized = {}) => {
             const {title, completed} = serialized;
             return [title, completed];
-          }).separate()
+          }).separate(2)
       );
   }
 }
@@ -65,76 +67,99 @@ extends Transmitter.Channels.CompositeChannel {
     super();
     this.todos = todos;
     this.todoListPersistenceValue = todoListPersistenceValue;
+    this.serializedTodoValueList = new Transmitter.Nodes.List();
     this.serializedTodoList = new Transmitter.Nodes.List();
-    this.serializedTodosValue = new Transmitter.Nodes.Value();
 
-    this.defineValueChannel()
-      .withOrigin(this.serializedTodosValue)
-      .withDerived(this.todoListPersistenceValue)
-      .withMapOrigin( (serializedTodos) => JSON.stringify(serializedTodos) )
-      .withMapDerived( (persistedTodos) => JSON.parse(persistedTodos) );
+    this.defineBidirectionalChannel()
+      .withOriginDerived(
+        this.serializedTodoList, this.todoListPersistenceValue
+      )
+      .withTransformOrigin(
+        (payload) =>
+          payload.toValue().map(
+            (serializedTodos) => JSON.stringify(serializedTodos)
+          )
+      )
+      .withTransformDerived(
+        (payload) =>
+          payload.map(
+            (persistedTodos) => JSON.parse(persistedTodos)
+          )
+          .toList()
+      );
 
-    this.defineListChannel()
-    .withOrigin(this.todos.todoList)
-    .withMapOrigin( (todo) => {
-      const serializedValue = new Transmitter.Nodes.Value();
-      serializedValue.todo = todo;
-      const id = serializedId++;
-      serializedValue.inspect = () =>
-        '[serializedTodoValue' + id + ' ' + this.todo + ']';
-      return serializedValue;
-    })
-    .withDerived(this.serializedTodoList)
-    .withMapDerived( (serializedValue) => {
-      const todo = this.todos.create();
-      serializedValue.todo = todo;
-      return todo;
-    })
-    .withMatchOriginDerived( (todo, serializedTodoValue) =>
-      todo === serializedTodoValue.todo
-    )
-    .withOriginDerivedChannel( (todo, serializedTodoValue) =>
-      new SerializedTodoChannel(todo, serializedTodoValue)
-    );
+    this.defineNestedBidirectionalChannel()
+      .withOriginDerived(this.todos.todoList, this.serializedTodoValueList)
+      .withMatchOriginDerived( (todo, serializedTodoValue) =>
+        todo === serializedTodoValue.todo
+      )
+      .withMapOrigin( (todo) => {
+        const serializedValue = new Transmitter.Nodes.Value();
+        serializedValue.todo = todo;
+        const id = serializedId++;
+        serializedValue.inspect = function() {
+          return '[serializedTodoValue' + id + ' ' + this.todo + ']';
+        };
+        return serializedValue;
+      })
+      .withMapDerived( (serializedValue) => {
+        const todo = this.todos.create();
+        serializedValue.todo = todo;
+        return todo;
+      })
+      .withOriginDerivedChannel( (todo, serializedTodoValue) =>
+        new SerializedTodoChannel(todo, serializedTodoValue)
+      );
 
     this.defineSimpleChannel()
       .inBackwardDirection()
-      .fromSource(this.serializedTodosValue)
-      .toTarget(this.serializedTodoList)
+      .fromSource(this.serializedTodoList)
+      .toTarget(this.serializedTodoValueList)
       .withTransform( (serializedTodosPayload) =>
-        serializedTodosPayload.toSetList().map(function() {
-          const v = new Transmitter.Nodes.Value();
-          const id = serializedId++;
-          v.inspect = () =>
-            '[serializedTodoValue' + id + ' ' + this.todo + ']';
-          return v;
-        })
+        serializedTodosPayload.updateMatching(
+          () => {
+            const serializedValue = new Transmitter.Nodes.Value();
+            const id = serializedId++;
+            serializedValue.inspect = function() {
+              return '[serializedTodoValue' + id + ' ' + this.todo + ']';
+            };
+            return serializedValue;
+          }
+        ,
+        () => true
+        )
       );
 
     this.todoPersistenceForwardChannelValue =
-      new Transmitter.ChannelNodes.DynamicChannelValue('sources', () =>
-        new Transmitter.Channels.SimpleChannel()
-        .inForwardDirection()
-        .toTarget(this.serializedTodosValue)
-        .withTransform(
-          (serializedTodosPayloads) => serializedTodosPayloads.flatten()
-        )
+      new Transmitter.ChannelNodes.DynamicListChannelValue(
+        'sources',
+        (sources) =>
+            new Transmitter.Channels.SimpleChannel()
+            .inForwardDirection()
+            .fromDynamicSources(sources)
+            .toTarget(this.serializedTodoList)
+            .withTransform(
+              (serializedTodosPayloads) => serializedTodosPayloads.flatten()
+            )
       );
 
     this.todoPersistenceBackwardChannelValue =
-      new Transmitter.ChannelNodes.DynamicChannelValue('targets', () =>
-        new Transmitter.Channels.SimpleChannel()
-        .inBackwardDirection()
-        .fromSource(this.serializedTodosValue)
-        .withTransform(
-          (serializedTodosPayload) =>
-            serializedTodosPayload.toSetList().unflatten()
-        )
+      new Transmitter.ChannelNodes.DynamicListChannelValue(
+        'targets',
+        (targets) =>
+          new Transmitter.Channels.SimpleChannel()
+            .inBackwardDirection()
+            .fromSource(this.serializedTodoList)
+            .toDynamicTargets(targets)
+            .withTransform(
+              (serializedTodosPayload) =>
+                serializedTodosPayload.unflatten()
+            )
       );
 
-    this.defineSimpleChannel()
-      .fromSource(this.serializedTodoList)
-      .toConnectionTargets(
+    this.defineNestedSimpleChannel()
+      .fromSource(this.serializedTodoValueList)
+      .toChannelTargets(
         this.todoPersistenceBackwardChannelValue,
         this.todoPersistenceForwardChannelValue
       );

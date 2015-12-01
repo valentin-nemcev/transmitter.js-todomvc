@@ -14,7 +14,7 @@ export default class HeaderView {
     this.$newTodoInput = this.$element.find('.new-todo');
 
     this.newTodoLabelInputValue =
-      new Transmitter.DOMElement.InputValueValue(this.$newTodoInput[0]);
+      new Transmitter.DOMElement.InputValue(this.$newTodoInput[0]);
     this.newTodoKeypressEvt =
       new Transmitter.DOMElement.DOMEvent(this.$newTodoInput[0], 'keyup');
 
@@ -41,9 +41,9 @@ export default class HeaderView {
     .withTransform(
       ([labelPayload, keypressPayload], tr) =>
         labelPayload
-          .replaceByNoop(matchEnter(keypressPayload))
+          .replaceByNoOp(matchEnter(keypressPayload))
           .map( (label) => todos.create().init(tr, {label}) )
-          .toAppendListElement()
+          .toAppendElementAction()
     );
   }
 }

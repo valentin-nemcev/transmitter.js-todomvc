@@ -28,7 +28,9 @@ export default class FooterView {
     this.$clearCompleted = this.$element.find('.clear-completed');
 
     this.completeCountValue =
-      new Transmitter.DOMElement.TextValue(this.$element.find('.todo-count')[0]);
+      new Transmitter.DOMElement.TextValue(
+        this.$element.find('.todo-count')[0]
+      );
 
     this.clearCompletedIsVisibleValue =
       new VisibilityToggleValue(this.$clearCompleted);
@@ -78,7 +80,7 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
         (todoListWithCompletePayload) =>
           todoListWithCompletePayload
             .filter( ([, isCompleted]) => !isCompleted )
-            .toSetValue()
+            .toValue()
             .map(
               ({length}) => [length, length === 1 ? 'item' : 'items'].join(' ')
             )
@@ -92,7 +94,7 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
         (todoListWithCompletePayload) =>
           todoListWithCompletePayload
             .filter( ([, isCompleted]) => isCompleted )
-            .toSetValue()
+            .toValue()
             .map( ({length}) => length > 0 )
       );
 
@@ -106,7 +108,7 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
       .withTransform(
         ([clearCompletedPayload, todoListWithCompletePayload]) =>
           todoListWithCompletePayload
-            .replaceByNoop(clearCompletedPayload)
+            .replaceByNoOp(clearCompletedPayload)
             .filter( ([, isCompleted]) => !isCompleted )
             .map( ([todo]) => todo )
       );
@@ -117,7 +119,7 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
       .toTarget(this.todoListFooterView.isVisibleValue)
       .withTransform(
         (todoListPayload) =>
-          todoListPayload.toSetValue().map( ({length}) => length > 0 )
+          todoListPayload.toValue().map( ({length}) => length > 0 )
       );
   }
 }

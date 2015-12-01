@@ -7,7 +7,7 @@ export function getKeycodeMatcher(...keys) {
   return (keypressPayload) =>
     keypressPayload
       .map( (evt) => keys.indexOf(keycode(evt)) >= 0 )
-      .noopIf( (isKey) => !isKey );
+      .noOpIf( (isKey) => !isKey );
 }
 
 

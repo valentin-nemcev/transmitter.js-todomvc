@@ -65,7 +65,7 @@ class TodoView {
       new Transmitter.DOMElement.TextValue(this.$label[0]);
 
     this.labelInputValue =
-      new Transmitter.DOMElement.InputValueValue(this.$edit[0]);
+      new Transmitter.DOMElement.InputValue(this.$edit[0]);
 
     this.isCompletedInputValue =
       new Transmitter.DOMElement.CheckboxStateValue(this.$checkbox[0]);
@@ -79,7 +79,8 @@ class TodoView {
     this.destroyClickEvt =
       new Transmitter.DOMElement.DOMEvent(this.$destroy[0], 'click');
 
-    this.isCompletedClassValue = new ClassToggleValue(this.$element, 'completed');
+    this.isCompletedClassValue =
+      new ClassToggleValue(this.$element, 'completed');
     this.editStateValue = new ClassToggleValue(this.$element, 'editing');
 
     this.startEditEvt = this.labelDblclickEvt;
@@ -100,7 +101,7 @@ class TodoView {
   }
 
   init(tr) {
-    this.editStateValue.init(tr, false);
+    this.editStateValue.set(false).init(tr);
     this.acceptEditChannel.init(tr);
     this.rejectEditChannel.init(tr);
     this.editStateChannel = new EditStateChannel(this).init(tr);
@@ -113,7 +114,7 @@ class TodoView {
       .fromSource(this.destroyClickEvt)
       .withTransform(
         (destroyClickPayload) =>
-          destroyClickPayload.map( () => this.todo ).toRemoveListElement()
+          destroyClickPayload.map( () => this.todo ).toRemoveElementAction()
       );
   }
 }
@@ -130,9 +131,8 @@ class TodoViewChannel extends Transmitter.Channels.CompositeChannel {
     this.todo = todo;
     this.todoView = todoView;
 
-    this.defineValueChannel()
-      .withOrigin(this.todo.labelValue)
-      .withDerived(this.todoView.labelValue);
+    this.defineBidirectionalChannel()
+      .withOriginDerived(this.todo.labelValue, this.todoView.labelValue);
 
     this.defineSimpleChannel()
       .inBackwardDirection()
@@ -140,7 +140,7 @@ class TodoViewChannel extends Transmitter.Channels.CompositeChannel {
       .toTarget(this.todo.labelValue)
       .withTransform(
         ([labelPayload, acceptPayload]) =>
-          labelPayload.replaceByNoop(acceptPayload)
+          labelPayload.replaceByNoOp(acceptPayload)
       );
 
     this.defineSimpleChannel()
@@ -153,17 +153,21 @@ class TodoViewChannel extends Transmitter.Channels.CompositeChannel {
       .toTarget(this.todoView.labelInputValue)
       .withTransform(
         ([labelPayload, startPayload, rejectPayload]) =>
-          labelPayload.replaceByNoop(startPayload.replaceNoopBy(rejectPayload))
+          labelPayload.replaceByNoOp(startPayload.replaceNoOpBy(rejectPayload))
       );
 
-    this.defineValueChannel()
-      .withOrigin(this.todo.isCompletedValue)
-      .withDerived(this.todoView.isCompletedInputValue);
+    this.defineBidirectionalChannel()
+      .withOriginDerived(
+        this.todo.isCompletedValue,
+        this.todoView.isCompletedInputValue
+      );
 
-    this.defineValueChannel()
+    this.defineBidirectionalChannel()
       .inForwardDirection()
-      .withOrigin(this.todo.isCompletedValue)
-      .withDerived(this.todoView.isCompletedClassValue);
+      .withOriginDerived(
+        this.todo.isCompletedValue,
+        this.todoView.isCompletedClassValue
+      );
   }
 }
 
@@ -233,36 +237,38 @@ class ToggleAllChannel extends Transmitter.Channels.CompositeChannel {
       .toTarget(this.toggleAllCheckboxValue)
       .withTransform(
         (todoListWithCompletePayload) =>
-          todoListWithCompletePayload.toSetValue().map(
+          todoListWithCompletePayload.toValue().map(
             (todos) => todos.every( ([, isCompleted]) => isCompleted )
           )
       );
 
     this.toggleAllDynamicChannelValue =
-      new Transmitter.ChannelNodes.DynamicChannelValue(
+      new Transmitter.ChannelNodes.DynamicListChannelValue(
         'targets',
-        () =>
+        (targets) =>
           new Transmitter.Channels.SimpleChannel()
             .inBackwardDirection()
             .fromSources(this.toggleAllCheckboxValue, this.toggleAllChangeEvt)
+            .toDynamicTargets(targets)
             .withTransform(
               ([isCompletedPayload, changePayload],
                isCompletedListPayload) => {
                 const payload = isCompletedPayload
-                  .replaceByNoop(changePayload)
+                  .replaceByNoOp(changePayload)
                   .map( (state) => !state );
                 return isCompletedListPayload.map( () => payload );
               }
             )
       );
 
-    this.defineSimpleChannel()
+    this.defineNestedSimpleChannel()
       .fromSource(this.todoList)
-      .toConnectionTarget(this.toggleAllDynamicChannelValue)
+      .toChannelTarget(this.toggleAllDynamicChannelValue)
       .withTransform(
         (todoListPayload) => {
           if (todoListPayload == null) return null;
-          return todoListPayload.map( ({isCompletedValue}) => isCompletedValue );
+          return todoListPayload
+            .map( ({isCompletedValue}) => isCompletedValue );
         }
       );
   }
@@ -285,9 +291,9 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel {
     this.removeTodoChannelList = new Transmitter.ChannelNodes.ChannelList();
     this.filteredTodoList = new Transmitter.Nodes.List();
 
-    this.defineSimpleChannel()
+    this.defineNestedSimpleChannel()
       .fromSource(this.todoListView.viewList)
-      .toConnectionTarget(this.removeTodoChannelList)
+      .toChannelTarget(this.removeTodoChannelList)
       .withTransform(
         (todoViews) =>
           todoViews != null
@@ -304,7 +310,9 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel {
       .toTarget(this.filteredTodoList)
       .withTransform(
         ([todoListPayload, activeFilterPayload]) => {
-          const filter = activeFilterPayload.get();
+          const {value: entry} =
+            activeFilterPayload[Symbol.iterator]().next();
+          const filter = entry[1];
           return todoListPayload
             .filter(
               ([, isCompleted]) => {
@@ -322,15 +330,14 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel {
         }
       );
 
-    this.defineListChannel()
+    this.defineNestedBidirectionalChannel()
       .inForwardDirection()
-      .withOrigin(this.filteredTodoList)
-      .withMapOrigin(
-        (todo, tr) => new TodoView(todo).init(tr)
-      )
-      .withDerived(this.todoListView.viewList)
+      .withOriginDerived(this.filteredTodoList, this.todoListView.viewList)
       .withMatchOriginDerived(
         (todo, todoView) => todo === todoView.todo
+      )
+      .withMapOrigin(
+        (todo, tr) => new TodoView(todo).init(tr)
       )
       .withMatchOriginDerivedChannel(
         (todo, todoView, channel) =>
@@ -355,7 +362,7 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel {
       .toTarget(this.todoListView.isVisibleValue)
       .withTransform(
         (todoListPayload) =>
-          todoListPayload.toSetValue().map( (todos) => todos.length > 0 )
+          todoListPayload.toValue().map( (todos) => todos.length > 0 )
       );
   }
 }
