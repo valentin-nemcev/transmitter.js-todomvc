@@ -39,7 +39,7 @@ class SerializedTodoChannel extends Transmitter.Channels.CompositeChannel {
       .toTarget(this.serializedTodoValue)
       .withTransform(
         ([labelPayload, isCompletedPayload]) =>
-          labelPayload.merge(isCompletedPayload).map(
+          labelPayload.zip(isCompletedPayload).map(
             ([label, isCompleted]) => ({title: label, completed: isCompleted})
           )
       );
@@ -53,81 +53,44 @@ class SerializedTodoChannel extends Transmitter.Channels.CompositeChannel {
           serializedTodoPayload.map( (serialized = {}) => {
             const {title, completed} = serialized;
             return [title, completed];
-          }).separate(2)
+          }).unzip(2)
       );
   }
 }
-
-let serializedId = 0;
 
 class TodoListPersistenceChannel
 extends Transmitter.Channels.CompositeChannel {
 
   constructor(todos, todoListPersistenceValue) {
     super();
-    this.todos = todos;
+    this.todoSet = todos.todoSet;
+    this.createTodo = todos.create.bind(todos);
+
+    this.todoList = new Transmitter.Nodes.ListNode();
     this.todoListPersistenceValue = todoListPersistenceValue;
     this.serializedTodoValueList = new Transmitter.Nodes.ListNode();
     this.serializedTodoList = new Transmitter.Nodes.ListNode();
 
     this.defineBidirectionalChannel()
-      .withOriginDerived(
-        this.serializedTodoList, this.todoListPersistenceValue
-      )
+      .withOriginDerived(this.todoSet, this.todoList)
       .withTransformOrigin(
-        (payload) =>
-          payload.toValue().map(
-            (serializedTodos) => JSON.stringify(serializedTodos)
-          )
-      )
-      .withTransformDerived(
-        (payload) =>
-          payload.map(
-            (persistedTodos) => JSON.parse(persistedTodos)
-          )
-          .toList()
+        (todosPayload) => todosPayload
       );
 
     this.defineNestedBidirectionalChannel()
-      .withOriginDerived(this.todos.todoList, this.serializedTodoValueList)
-      .withMatchOriginDerived( (todo, serializedTodoValue) =>
-        todo === serializedTodoValue.todo
+      .withOriginDerived(this.todoList, this.serializedTodoValueList)
+      .withTransformOrigin(
+        (todosPayload) => todosPayload.updateListByIndex(
+          () => new Transmitter.Nodes.ValueNode()
+        )
       )
-      .withMapOrigin( (todo) => {
-        const serializedValue = new Transmitter.Nodes.ValueNode();
-        serializedValue.todo = todo;
-        const id = serializedId++;
-        serializedValue.inspect = function() {
-          return '[serializedTodoValue' + id + ' ' + this.todo + ']';
-        };
-        return serializedValue;
-      })
-      .withMapDerived( (serializedValue) => {
-        const todo = this.todos.create();
-        serializedValue.todo = todo;
-        return todo;
-      })
+      .withTransformDerived(
+        (valuesPayload) => valuesPayload.updateListByIndex(
+          () => this.createTodo()
+        )
+      )
       .withOriginDerivedChannel( (todo, serializedTodoValue) =>
         new SerializedTodoChannel(todo, serializedTodoValue)
-      );
-
-    this.defineSimpleChannel()
-      .inBackwardDirection()
-      .fromSource(this.serializedTodoList)
-      .toTarget(this.serializedTodoValueList)
-      .withTransform( (serializedTodosPayload) =>
-        serializedTodosPayload.updateMatching(
-          () => {
-            const serializedValue = new Transmitter.Nodes.ValueNode();
-            const id = serializedId++;
-            serializedValue.inspect = function() {
-              return '[serializedTodoValue' + id + ' ' + this.todo + ']';
-            };
-            return serializedValue;
-          }
-        ,
-        () => true
-        )
       );
 
     this.todoPersistenceForwardChannelValue =
@@ -153,7 +116,7 @@ extends Transmitter.Channels.CompositeChannel {
             .toDynamicTargets(targets)
             .withTransform(
               (serializedTodosPayload) =>
-                serializedTodosPayload.unflatten()
+                serializedTodosPayload.unflattenToValues()
             )
       );
 
@@ -162,6 +125,37 @@ extends Transmitter.Channels.CompositeChannel {
       .toChannelTargets(
         this.todoPersistenceBackwardChannelValue,
         this.todoPersistenceForwardChannelValue
+      );
+
+    this.defineSimpleChannel()
+      .inBackwardDirection()
+      .fromSource(this.serializedTodoList)
+      .toTarget(this.serializedTodoValueList)
+      .withTransform(
+        (serializedTodosPayload) => serializedTodosPayload.updateListByIndex(
+          () => new Transmitter.Nodes.ValueNode()
+        )
+      );
+
+    this.defineBidirectionalChannel()
+      .withOriginDerived(
+        this.serializedTodoList, this.todoListPersistenceValue
+      )
+      .withTransformOrigin(
+        (payload) =>
+          payload
+          .joinValues()
+          .map(
+            (serializedTodos) => JSON.stringify(serializedTodos)
+          )
+      )
+      .withTransformDerived(
+        (payload) =>
+          payload
+          .map(
+            (persistedTodos) => JSON.parse(persistedTodos)
+          )
+          .splitValues()
       );
   }
 }

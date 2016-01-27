@@ -53,8 +53,8 @@ class App {
       },
     ]);
 
-    // this.todoStorage.createTodosChannel(this.todos).init(tr);
-    // this.todoStorage.load(tr);
+    this.todoStorage.createTodosChannel(this.todos).init(tr);
+    this.todoStorage.load(tr);
 
     this.headerView.init(tr);
     this.headerView.createTodosChannel(this.todos).init(tr);

@@ -178,18 +178,16 @@ export default class MainView {
 
     this.viewMap = new Transmitter.Nodes.OrderedMapNode();
     this.elementList =
-      new Transmitter.DOMElement.ChildrenList(
+      new Transmitter.DOMElement.ChildrenSet(
         this.$element.find('.todo-list')[0]
       );
 
     this.viewElementListChannel =
-      new Transmitter.Channels.SimpleChannel()
+      new Transmitter.Channels.BidirectionalChannel()
         .inForwardDirection()
-        .fromSource(this.viewMap)
-        .toTarget(this.elementList)
-        .withTransform(
-          (views) => views.map( (view) => view.$element[0] )
-        );
+        .withOriginDerived(this.viewMap, this.elementList)
+        .updateSetByValue()
+        .withMapOrigin((view) => view.$element[0]);
 
     const $toggleAll = this.$element.find('.toggle-all');
     this.toggleAllCheckboxValue =
@@ -329,7 +327,7 @@ class MainViewChannel extends Transmitter.Channels.CompositeChannel {
     this.defineNestedBidirectionalChannel()
       .inForwardDirection()
       .withOriginDerived(this.filteredTodoList, this.todoListView.viewMap)
-      // .useMapUpdate()
+      .updateMapByValue()
       .withMapOrigin(
         (todo, tr) => new TodoView(todo).init(tr)
       )
