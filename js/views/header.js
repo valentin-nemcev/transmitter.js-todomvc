@@ -37,13 +37,13 @@ export default class HeaderView {
     return new Transmitter.Channels.SimpleChannel()
     .inBackwardDirection()
     .fromSources(this.newTodoLabelInputValue, this.newTodoKeypressEvt)
-    .toTarget(todos.todoList)
+    .toTarget(todos.todoSet)
     .withTransform(
       ([labelPayload, keypressPayload], tr) =>
         labelPayload
           .replaceByNoOp(matchEnter(keypressPayload))
           .map( (label) => todos.create().init(tr, {label}) )
-          .toAppendElementAction()
+          .toAppendAction()
     );
   }
 }

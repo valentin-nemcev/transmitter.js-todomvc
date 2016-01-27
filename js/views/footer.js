@@ -2,7 +2,7 @@ import * as Transmitter from 'transmitter-framework/index.es';
 
 import {VisibilityToggleValue} from '../helpers';
 
-class ActiveFilterSelector extends Transmitter.Nodes.Value {
+class ActiveFilterSelector extends Transmitter.Nodes.ValueNode {
   constructor($filters) {
     super();
     this.$filters = $filters;
@@ -48,7 +48,7 @@ export default class FooterView {
 
   createTodosChannel(todos, activeFilter) {
     return new FooterViewChannel(
-      todos.todoList, todos.withComplete, this, activeFilter
+      todos.todoSet, todos.withComplete, this, activeFilter
     );
   }
 }
@@ -56,13 +56,13 @@ export default class FooterView {
 
 class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
   constructor(
-    todoList,
+    todoSet,
     todoListWithComplete,
     todoListFooterView,
     activeFilter
   ) {
     super();
-    this.todoList = todoList;
+    this.todoSet = todoSet;
     this.todoListWithComplete = todoListWithComplete;
     this.todoListFooterView = todoListFooterView;
     this.activeFilter = activeFilter;
@@ -80,7 +80,7 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
         (todoListWithCompletePayload) =>
           todoListWithCompletePayload
             .filter( ([, isCompleted]) => !isCompleted )
-            .toValue()
+            .joinValues()
             .map(
               ({length}) => [length, length === 1 ? 'item' : 'items'].join(' ')
             )
@@ -94,7 +94,7 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
         (todoListWithCompletePayload) =>
           todoListWithCompletePayload
             .filter( ([, isCompleted]) => isCompleted )
-            .toValue()
+            .joinValues()
             .map( ({length}) => length > 0 )
       );
 
@@ -104,7 +104,7 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
         this.todoListFooterView.clearCompletedClickEvt,
         this.todoListWithComplete
       )
-      .toTarget(this.todoList)
+      .toTarget(this.todoSet)
       .withTransform(
         ([clearCompletedPayload, todoListWithCompletePayload]) =>
           todoListWithCompletePayload
@@ -115,11 +115,11 @@ class FooterViewChannel extends Transmitter.Channels.CompositeChannel {
 
     this.defineSimpleChannel()
       .inForwardDirection()
-      .fromSource(this.todoList)
+      .fromSource(this.todoSet)
       .toTarget(this.todoListFooterView.isVisibleValue)
       .withTransform(
         (todoListPayload) =>
-          todoListPayload.toValue().map( ({length}) => length > 0 )
+          todoListPayload.joinValues().map( ({length}) => length > 0 )
       );
   }
 }

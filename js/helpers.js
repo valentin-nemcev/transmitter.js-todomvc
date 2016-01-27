@@ -11,7 +11,7 @@ export function getKeycodeMatcher(...keys) {
 }
 
 
-export class VisibilityToggleValue extends Transmitter.Nodes.Value {
+export class VisibilityToggleValue extends Transmitter.Nodes.ValueNode {
 
   constructor($element) {
     super();
@@ -29,7 +29,7 @@ export class VisibilityToggleValue extends Transmitter.Nodes.Value {
 }
 
 
-export class ClassToggleValue extends Transmitter.Nodes.Value {
+export class ClassToggleValue extends Transmitter.Nodes.ValueNode {
 
   constructor($element, _class) {
     super();

@@ -5,7 +5,7 @@ export default class TodoStorage {
   constructor(name) {
     this.name = name;
     this.todoListPersistenceValue =
-      new Transmitter.Nodes.PropertyValue(localStorage, this.name);
+      new Transmitter.Nodes.PropertyValueNode(localStorage, this.name);
   }
 
   setDefault(serializedTodos) {
@@ -67,8 +67,8 @@ extends Transmitter.Channels.CompositeChannel {
     super();
     this.todos = todos;
     this.todoListPersistenceValue = todoListPersistenceValue;
-    this.serializedTodoValueList = new Transmitter.Nodes.List();
-    this.serializedTodoList = new Transmitter.Nodes.List();
+    this.serializedTodoValueList = new Transmitter.Nodes.ListNode();
+    this.serializedTodoList = new Transmitter.Nodes.ListNode();
 
     this.defineBidirectionalChannel()
       .withOriginDerived(
@@ -94,7 +94,7 @@ extends Transmitter.Channels.CompositeChannel {
         todo === serializedTodoValue.todo
       )
       .withMapOrigin( (todo) => {
-        const serializedValue = new Transmitter.Nodes.Value();
+        const serializedValue = new Transmitter.Nodes.ValueNode();
         serializedValue.todo = todo;
         const id = serializedId++;
         serializedValue.inspect = function() {
@@ -118,7 +118,7 @@ extends Transmitter.Channels.CompositeChannel {
       .withTransform( (serializedTodosPayload) =>
         serializedTodosPayload.updateMatching(
           () => {
-            const serializedValue = new Transmitter.Nodes.Value();
+            const serializedValue = new Transmitter.Nodes.ValueNode();
             const id = serializedId++;
             serializedValue.inspect = function() {
               return '[serializedTodoValue' + id + ' ' + this.todo + ']';

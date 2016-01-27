@@ -21,7 +21,7 @@ class App {
     this.footerView = new FooterView($('.footer'));
 
     this.locationHash = new Transmitter.Browser.LocationHash();
-    this.activeFilter = new Transmitter.Nodes.Value();
+    this.activeFilter = new Transmitter.Nodes.ValueNode();
     this.locationHashChannel = new Transmitter.Channels.SimpleChannel()
       .inBackwardDirection()
       .fromSource(this.locationHash)
@@ -53,8 +53,8 @@ class App {
       },
     ]);
 
-    this.todoStorage.createTodosChannel(this.todos).init(tr);
-    this.todoStorage.load(tr);
+    // this.todoStorage.createTodosChannel(this.todos).init(tr);
+    // this.todoStorage.load(tr);
 
     this.headerView.init(tr);
     this.headerView.createTodosChannel(this.todos).init(tr);

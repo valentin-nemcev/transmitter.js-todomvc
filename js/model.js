@@ -4,15 +4,15 @@ import * as Transmitter from 'transmitter-framework/index.es';
 
 export default class Todos {
   constructor() {
-    this.todoList = new Transmitter.Nodes.List();
+    this.todoSet = new Transmitter.Nodes.OrderedSetNode();
 
-    this.nonBlankTodoList = new Transmitter.Nodes.List();
+    this.nonBlankTodoSet = new Transmitter.Nodes.OrderedSetNode();
     this.nonBlankTodoListChannel =
-      new NonBlankTodoListChannel(this.nonBlankTodoList, this.todoList);
+      new NonBlankTodoListChannel(this.nonBlankTodoSet, this.todoSet);
 
-    this.withComplete = new Transmitter.Nodes.List();
+    this.withComplete = new Transmitter.Nodes.ListNode();
     this.todoListWithCompleteChannel =
-      new TodoListWithCompleteChannel(this.todoList, this.withComplete);
+      new TodoListWithCompleteChannel(this.todoSet, this.withComplete);
   }
 
   init(tr) {
@@ -33,8 +33,8 @@ class Todo {
   }
 
   constructor() {
-    this.labelValue = new Transmitter.Nodes.Value();
-    this.isCompletedValue = new Transmitter.Nodes.Value();
+    this.labelValue = new Transmitter.Nodes.ValueNode();
+    this.isCompletedValue = new Transmitter.Nodes.ValueNode();
   }
 
   init(tr, {label, isCompleted} = {}) {
@@ -51,27 +51,27 @@ function nonBlank(str) {
 
 
 class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel {
-  constructor(nonBlankTodoList, todoList) {
+  constructor(nonBlankTodoSet, todoSet) {
     super();
-    this.nonBlankTodoList = nonBlankTodoList;
-    this.todoList = todoList;
+    this.nonBlankTodoSet = nonBlankTodoSet;
+    this.todoSet = todoSet;
 
     this.nonBlankTodoChannelValue =
       new Transmitter.ChannelNodes.ChannelValue();
 
     this.defineBidirectionalChannel()
       .inForwardDirection()
-      .withOriginDerived(this.nonBlankTodoList, this.todoList);
+      .withOriginDerived(this.nonBlankTodoSet, this.todoSet);
 
     this.defineNestedSimpleChannel()
-      .fromSource(this.todoList)
+      .fromSource(this.todoSet)
       .toChannelTarget(this.nonBlankTodoChannelValue)
       .withTransform(
         (todoListPayload) =>
-          todoListPayload.toValue().map(
+          todoListPayload.joinValues().map(
             (todos) =>
               this.createNonBlankTodoChannel(todos)
-                .toTarget(this.nonBlankTodoList)
+                .toTarget(this.nonBlankTodoSet)
         )
       );
   }
@@ -81,7 +81,7 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel {
       .inBackwardDirection()
       .fromDynamicSources(todos.map( (todo) => todo.labelValue ))
       .withTransform( (labelPayloads) =>
-        Transmitter.mergeValuePayloads(labelPayloads).map(
+        Transmitter.zipPayloads(labelPayloads).map(
           function(labels) {
             const results = [];
             for (let i = 0; i < labels.length; i++) {
@@ -89,7 +89,7 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel {
             }
             return results;
           }
-        ).toList()
+        ).splitValues()
       );
   }
 }
@@ -97,21 +97,21 @@ class NonBlankTodoListChannel extends Transmitter.Channels.CompositeChannel {
 
 class TodoListWithCompleteChannel
 extends Transmitter.Channels.CompositeChannel {
-  constructor(todoList, todoListWithComplete) {
+  constructor(todoSet, todoListWithComplete) {
     super();
-    this.todoList = todoList;
+    this.todoSet = todoSet;
     this.todoListWithComplete = todoListWithComplete;
 
     this.defineSimpleChannel()
       .inBackwardDirection()
       .fromSource(this.todoListWithComplete)
-      .toTarget(this.todoList)
+      .toTarget(this.todoSet)
       .withTransform(
         (todoListWithCompletePayload) =>
           todoListWithCompletePayload.map( ([todo]) => todo )
       );
 
-    this.isCompletedList = new Transmitter.Nodes.List();
+    this.isCompletedList = new Transmitter.Nodes.ListNode();
     this.isCompletedDynamicChannelValue =
       new Transmitter.ChannelNodes.DynamicListChannelValue(
         'sources',
@@ -126,7 +126,7 @@ extends Transmitter.Channels.CompositeChannel {
         );
 
     this.defineNestedSimpleChannel()
-      .fromSource(this.todoList)
+      .fromSource(this.todoSet)
       .toChannelTarget(this.isCompletedDynamicChannelValue)
       .withTransform(
         (todoListPayload) =>
@@ -135,7 +135,7 @@ extends Transmitter.Channels.CompositeChannel {
 
     this.defineSimpleChannel()
       .inForwardDirection()
-      .fromSources(this.todoList, this.isCompletedList)
+      .fromSources(this.todoSet, this.isCompletedList)
       .toTarget(this.todoListWithComplete)
       .withTransform(
         ([todosPayload, isCompletedPayload]) =>
